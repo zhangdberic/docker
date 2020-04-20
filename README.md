@@ -626,7 +626,13 @@ docker pull rabbitmq
 运行rabbitmq镜像
 
 ```shell
-docker run -d --name rabbitmq1 -p 5672:5672 -p 15672:15672 -e RABBITMQ_DEFAULT_USER=admin -e RABBITMQ_DEFAULT_PASS=Rabbitmq-401 docker.io/rabbitmq
+docker run -d --name rabbitmq1 -p 5672:5672 -p 15672:15672 -e RABBITMQ_DEFAULT_USER=admin -e RABBITMQ_DEFAULT_PASS=Rabbitmq-401 rabbitmq
+```
+
+运行界面管理插件
+
+```shell
+docker exec -it rabbitmq1 rabbitmq-plugins enable rabbitmq_management
 ```
 
 
@@ -728,7 +734,7 @@ http {
 
     #gzip  on;
 
-    include /etc/nginx/conf.d/*.conf;
+    #include /etc/nginx/conf.d/*.conf; 注意：注释掉这个，否则你要仔细阅读这个目录下的default.conf文件内容
 }
 ```
 
@@ -757,7 +763,23 @@ http {
 
 ```
 
+**验证nginx.conf**
 
+第1个nginx为容器名
+
+```shell
+docker exec -it nginx nginx -t
+```
+
+**重启nginx**
+
+nginx为容器名
+
+```nginx
+docker restart nginx
+```
+
+目前测试：docker exec -it nginx nginx -s reload不起作用。
 
 **运行nginx**
 
