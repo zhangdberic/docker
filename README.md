@@ -810,6 +810,20 @@ firewall-cmd --reload
 
 ### jenkins镜像
 
+mkdir -p /data/jenkins
+
+```shell
+docker run \
+  -u root \
+  --name jenkins \
+  -d \
+  -p 8080:8080 \
+  -p 50000:50000 \
+  -v /data/jenkins:/var/jenkins_home \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  jenkinsci/blueocean
+```
+
 jenkins安装需要能接入到外网，其要下载配置文件。
 
 docker pull jenkins
@@ -886,3 +900,33 @@ docker restart +ContainerName
 https://blog.csdn.net/qq_32218457/article/details/80775049
 
 https://www.cnblogs.com/ming-blogs/p/10903408.html
+
+https://www.jianshu.com/p/41f2def6ec59
+
+
+
+==================
+
+
+
+docker pull jenkins/jenkins:lts
+
+
+
+```xml
+<?xml version='1.0' encoding='UTF-8'?>
+<sites>
+  <site>
+    <id>default</id>
+    <url>https://jenkins-zh.gitee.io/update-center-mirror/tsinghua/update-center.json</url>
+  </site>
+</sites>
+```
+
+
+
+docker run --name devops-jenkins --env JAVA_OPTS=-Dhudson.model.DownloadService.noSignatureCheck=true --user=root -p 10000:8080 -p 50000:50000 -v /data/jenkins_home:/var/jenkins_home -d jenkins/jenkins:lts
+
+
+
+https://www.jianshu.com/p/41f2def6ec59
