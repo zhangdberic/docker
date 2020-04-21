@@ -425,17 +425,25 @@ java -Xms1g -Xmx1g -XX:+UseParNewGC -XX:+UseConcMarkSweepGC -jar /sc-config-1.0.
 
 ## docker命令
 
+### docker info
+
+查看docker系统的信息，例如：docker版本、使用存储情况等。
+
 ### docker inspect xxx
 
-查看docker镜像实例运行情况，命令：
+查看docker镜像情况，命令：
 
 docker inspect 容器名和容器ID
+
+查看底层运行的jvm版本、容器内运行软件的版本等、软件默认的配置信息等。
 
 例如：docker inspect redis1
 
 查看运行的ip地址
 
 docker inspect redis1 | grep IPAddress
+
+
 
 
 
@@ -800,3 +808,81 @@ firewall-cmd --permanent --add-port=80/tcp
 firewall-cmd --reload
 ```
 
+### jenkins镜像
+
+jenkins安装需要能接入到外网，其要下载配置文件。
+
+docker pull jenkins
+
+mkdir -p /data/jenkins
+
+mkdir -p /data/mavenRepository
+
+chown -R 1000:1000 /data/jenkins/
+
+docker run --name jenkins -p 10000:8080 -p 50000:50000 -v /data/jenkins:/var/jenkins_home -v /data/mavenRepository:/opt/mavenRepository --env JAVA_OPTS=-Dhudson.model.DownloadService.noSignatureCheck=true -d jenkins
+
+http://192.168.5.78:10000/
+
+如果:安装jenkins最新版的时候，发现一直卡在等待界面上。则，修改如下：
+
+修改/data/jenkines/hudson.model.UpdateCenter.xml文件，这里修改url为：
+
+https://jenkins-zh.gitee.io/update-center-mirror/tsinghua/update-center.json
+
+```xml
+<?xml version='1.0' encoding='UTF-8'?>
+<sites>
+  <site>
+    <id>default</id>
+    <url>https://jenkins-zh.gitee.io/update-center-mirror/tsinghua/update-center.json</url>
+  </site>
+</sites>
+```
+
+在重新启动docker jenkines容器。
+
+界面提示初始化admin密码，这个密码可以启动docker jenkines的日志中找到。
+
+选择Select plugins to install（自定义选择要安装的插件），注意：SVN和Git支持，默认都是勾选的。点击install按钮。
+
+### An error occurred during installation: No such plugin: cloudbees-folder
+
+启动完jenkins之后打开控制台页面，初次安装后需要执行安装插件的步骤，但是点击任意一个插件安装，都会报类似这样的错误：An error occurred during installation: No such plugin: cloudbees-folder
+ Github上已经有报类似错误的帖子。并给出了解决方案：[https://github.com/jenkinsci/docker/issues/424](https://links.jianshu.com/go?to=https%3A%2F%2Fgithub.com%2Fjenkinsci%2Fdocker%2Fissues%2F424)，对，就是重启，一个简单到不能再简单的方案，这是不是bug？
+
+
+
+正文
+进入 Jenkins 容器在宿主机的挂载目录/home/jenkins中
+
+cd /home/jenkins
+
+在 CentOS7 中下载Jenkins的最新war包
+
+wget http://mirrors.jenkins.io/war/latest/jenkins.war
+
+进入容器
+
+docker exec -it -u root +ContainerId bash
+
+查看容器中jenkins war包的位置，并备份原来的war包
+
+whereis jenkins
+cd /usr/share/jenkins
+cp jenkins.war jenkinsBAK.war
+
+将/var/jenkins_home下的包cp到/usr/share/jenkins下覆盖
+
+cp /var/jenkins_home/jenkins.war /usr/share/jenkins/
+
+退出容器并重启
+
+exit
+docker restart +ContainerName
+
+
+
+https://blog.csdn.net/qq_32218457/article/details/80775049
+
+https://www.cnblogs.com/ming-blogs/p/10903408.html
