@@ -830,7 +830,7 @@ docker run --name jenkins --env JAVA_OPTS=-Dhudson.model.DownloadService.noSigna
 
 --env JAVA_OPTS=-Dhudson.model.DownloadService.noSignatureCheck=true 不进行插件的摘要验证；
 
---user=root 使用root用户启动jenkins，默认是jenkins用户启动，这需要为外界挂载目录设置拥有者1000；
+--user=root 使用root用户启动jenkins。默认是jenkins用户启动，这需要为外界挂载目录设置拥有者1000；
 
 -p 10000:8080 映射http管理界面端口；
 
@@ -884,7 +884,7 @@ Please use the following password to proceed to installation:
 
 第三步，创建一个用户，正常创建就可以了。
 
-
+以上jenkines的docker镜像安装和设置就完成了，jenkins的使用，可以见linux下的jenkins文档。
 
 
 
