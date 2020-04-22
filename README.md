@@ -810,108 +810,49 @@ firewall-cmd --reload
 
 ### jenkins镜像
 
-mkdir -p /data/jenkins
+**拉取jenkins镜像**
 
 ```shell
-docker run \
-  -u root \
-  --name jenkins \
-  -d \
-  -p 8080:8080 \
-  -p 50000:50000 \
-  -v /data/jenkins:/var/jenkins_home \
-  -v /var/run/docker.sock:/var/run/docker.sock \
-  jenkinsci/blueocean
-```
-
-jenkins安装需要能接入到外网，其要下载配置文件。
-
-docker pull jenkins
-
-mkdir -p /data/jenkins
-
-mkdir -p /data/mavenRepository
-
-chown -R 1000:1000 /data/jenkins/
-
-docker run --name jenkins -p 10000:8080 -p 50000:50000 -v /data/jenkins:/var/jenkins_home -v /data/mavenRepository:/opt/mavenRepository --env JAVA_OPTS=-Dhudson.model.DownloadService.noSignatureCheck=true -d jenkins
-
-http://192.168.5.78:10000/
-
-如果:安装jenkins最新版的时候，发现一直卡在等待界面上。则，修改如下：
-
-修改/data/jenkines/hudson.model.UpdateCenter.xml文件，这里修改url为：
-
-https://jenkins-zh.gitee.io/update-center-mirror/tsinghua/update-center.json
-
-```xml
-<?xml version='1.0' encoding='UTF-8'?>
-<sites>
-  <site>
-    <id>default</id>
-    <url>https://jenkins-zh.gitee.io/update-center-mirror/tsinghua/update-center.json</url>
-  </site>
-</sites>
-```
-
-在重新启动docker jenkines容器。
-
-界面提示初始化admin密码，这个密码可以启动docker jenkines的日志中找到。
-
-选择Select plugins to install（自定义选择要安装的插件），注意：SVN和Git支持，默认都是勾选的。点击install按钮。
-
-### An error occurred during installation: No such plugin: cloudbees-folder
-
-启动完jenkins之后打开控制台页面，初次安装后需要执行安装插件的步骤，但是点击任意一个插件安装，都会报类似这样的错误：An error occurred during installation: No such plugin: cloudbees-folder
- Github上已经有报类似错误的帖子。并给出了解决方案：[https://github.com/jenkinsci/docker/issues/424](https://links.jianshu.com/go?to=https%3A%2F%2Fgithub.com%2Fjenkinsci%2Fdocker%2Fissues%2F424)，对，就是重启，一个简单到不能再简单的方案，这是不是bug？
-
-
-
-正文
-进入 Jenkins 容器在宿主机的挂载目录/home/jenkins中
-
-cd /home/jenkins
-
-在 CentOS7 中下载Jenkins的最新war包
-
-wget http://mirrors.jenkins.io/war/latest/jenkins.war
-
-进入容器
-
-docker exec -it -u root +ContainerId bash
-
-查看容器中jenkins war包的位置，并备份原来的war包
-
-whereis jenkins
-cd /usr/share/jenkins
-cp jenkins.war jenkinsBAK.war
-
-将/var/jenkins_home下的包cp到/usr/share/jenkins下覆盖
-
-cp /var/jenkins_home/jenkins.war /usr/share/jenkins/
-
-退出容器并重启
-
-exit
-docker restart +ContainerName
-
-
-
-https://blog.csdn.net/qq_32218457/article/details/80775049
-
-https://www.cnblogs.com/ming-blogs/p/10903408.html
-
-https://www.jianshu.com/p/41f2def6ec59
-
-
-
-==================
-
-
-
 docker pull jenkins/jenkins:lts
+```
 
+这里拉取的是lts版本，这个版本是jenkins长期支持的版本。
 
+**启动jenkins**
+
+```shell
+docker run --name jenkins --env JAVA_OPTS=-Dhudson.model.DownloadService.noSignatureCheck=true --user=root -p 10000:8080 -p 50000:50000 -v /data/jenkins_home:/var/jenkins_home -v /usr/local/jdk:/jdk -v /usr/local/maven:/maven -v /data/maven_repo:/maven_repo -d jenkins/jenkins:lts
+```
+
+启动项说明：
+
+--name 指定了docker的名称;
+
+--env JAVA_OPTS=-Dhudson.model.DownloadService.noSignatureCheck=true 不进行插件的摘要验证；
+
+--user=root 使用root用户启动jenkins，默认是jenkins用户启动，这需要为外界挂载目录设置拥有者1000；
+
+-p 10000:8080 映射http管理界面端口；
+
+-p 50000:50000 映射jnpi端口；
+
+-v /data/jenkins_home:/var/jenkins_home 挂载宿主机jenkins_home目录；
+
+-v /usr/local/jdk:/jdk 宿主机的jdk目录，挂载到docker容器中；
+
+-v /usr/local/maven:/maven 宿主机的maven目录，挂载到docker容器中；
+
+-v /data/maven_repo:/maven_repo 宿主机的maven_repo目录(maven本地仓库)，挂载到docker容器中；
+
+-d jenkins/jenkins:lts 后台启动jenkins/jenkins:lts容器；
+
+**修改插件源**
+
+上面第一次启动后会在/data/jenkines_home(挂载宿主机)目录下生成很多文件，
+
+修改/data/jenkines_home/hudson.model.UpdateCenter.xml文件，这里修改url为：
+
+https://jenkins-zh.gitee.io/update-center-mirror/tsinghua/update-center.json，这是国内的插件镜像地址；
 
 ```xml
 <?xml version='1.0' encoding='UTF-8'?>
@@ -923,10 +864,27 @@ docker pull jenkins/jenkins:lts
 </sites>
 ```
 
+再重新启动docker jenkines容器。http://ip:10000/restart
+
+**http界面初始化jenkins系统**
+
+http://ip:10000
+
+第一次启动，初始化密码，这个密码可以在jenkins docker启动控制台输出上看到，把这个粘贴过来，点击确认；
+
+```shell
+Jenkins initial setup is required. An admin user has been created and a password generated.
+Please use the following password to proceed to installation:
+
+7dab5a023c5041c4b2437be2cec3cb72
+
+```
+
+第二步，插件初始化，这里可以先不用安装任何插件，选择第2个（自定义插件安装），并选择none（不安装插件）。
+
+第三步，创建一个用户，正常创建就可以了。
 
 
-docker run --name devops-jenkins --env JAVA_OPTS=-Dhudson.model.DownloadService.noSignatureCheck=true --user=root -p 10000:8080 -p 50000:50000 -v /data/jenkins_home:/var/jenkins_home -d jenkins/jenkins:lts
 
 
 
-https://www.jianshu.com/p/41f2def6ec59
