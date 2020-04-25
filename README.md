@@ -821,7 +821,7 @@ docker pull jenkins/jenkins:lts
 **启动jenkins**
 
 ```shell
-docker run --name jenkins --env JAVA_OPTS=-Dhudson.model.DownloadService.noSignatureCheck=true --user=root -p 10000:8080 -p 50000:50000 -v /data/jenkins_home:/var/jenkins_home -v /usr/local/jdk:/jdk -v /usr/local/maven:/maven -v /data/maven_repo:/maven_repo -d jenkins/jenkins:lts
+docker run --name jenkins --env JAVA_OPTS="-Dhudson.model.DownloadService.noSignatureCheck=true -Duser.timezone=Asia/Shanghai" --user=root -p 10000:8080 -p 50000:50000 -v /data/jenkins_home:/var/jenkins_home -v /usr/local/jdk:/jdk -v /usr/local/maven:/maven -v /data/maven_repo:/maven_repo -d jenkins/jenkins:lts
 ```
 
 启动项说明：
