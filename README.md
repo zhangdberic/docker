@@ -60,7 +60,9 @@ yum install docker-ce-19.03.4-3.el7
 
 ### 启动docker
 
-systemctl start docker
+su - docker
+
+sudo systemctl start docker
 
 ### 验证安装docker成功
 
@@ -83,6 +85,38 @@ EOF
 systemctl daemon-reload
 
 systemctl restart docker
+
+### docker非root用户环境运行
+
+useradd docker -g docker
+
+docker用户加入到sudo中
+
+root用户 passwd docker
+
+su - docker
+
+sudo systemctl restart docker
+
+如果普通用户执行docker命令，如果提示get …… dial unix /var/run/docker.sock权限不够，则修改/var/run/docker.sock权限
+使用root用户执行如下命令，即可
+
+```
+sudo chmod a+rw /var/run/docker.sock
+```
+
+Dockerfile文件加入如下两个指令，在dockerfile的FROM指令后，ENTRYPOINT指令前：
+
+```dockerfile
+RUN useradd noroot -u 1000 -s /bin/bash
+USER noroot
+```
+
+这里的-u指定了用户的sid，这里统一设置为1000，如果你的宿主机需要挂载目录到镜像，则你的宿主机挂载的目录需要，指定1000为拥有者。例如：chown -R 1000:1000 /data/jenkins_home
+
+https://blog.csdn.net/yygydjkthh/article/details/47694929
+
+可以在宿主机上通过ps -ef|grep xxx，xxx为进程名，例如：nginx、redis等，来观察是否是非root用户启动docker.
 
 ## 安装私有仓库(registry2)
 
@@ -442,6 +476,10 @@ docker inspect 容器名和容器ID
 查看运行的ip地址
 
 docker inspect redis1 | grep IPAddress
+
+查看运行的user
+
+docker inspect jenkins/jenkins | grep User
 
 
 
@@ -818,10 +856,19 @@ docker pull jenkins/jenkins:lts
 
 这里拉取的是lts版本，这个版本是jenkins长期支持的版本。
 
+**设置jenkins访问者权限**
+
+```shell
+mkdir /data/jenkins_home
+chown -R 1000:1000 /data/jenkins_home
+或者
+启动jenkins指定为root用户，docker启动脚本加入 --user=root 
+```
+
 **启动jenkins**
 
 ```shell
-docker run --name jenkins --env JAVA_OPTS="-Dhudson.model.DownloadService.noSignatureCheck=true -Duser.timezone=Asia/Shanghai" --user=root -p 10000:8080 -p 50000:50000 -v /data/jenkins_home:/var/jenkins_home -v /usr/local/jdk:/jdk -v /usr/local/maven:/maven -v /data/maven_repo:/maven_repo -d jenkins/jenkins:lts
+docker run --name jenkins --env JAVA_OPTS="-Dhudson.model.DownloadService.noSignatureCheck=true -Duser.timezone=Asia/Shanghai" -p 10000:8080 -p 50000:50000 -v /data/jenkins_home:/var/jenkins_home -v /usr/local/jdk:/jdk -v /usr/local/maven:/maven -v /data/maven_repo:/maven_repo -d jenkins/jenkins:lts
 ```
 
 启动项说明：
