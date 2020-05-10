@@ -935,3 +935,6 @@ Please use the following password to proceed to installation:
 
 
 
+## docker swarm
+
+https://blog.51cto.com/ligeo5210/2304294
