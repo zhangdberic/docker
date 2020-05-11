@@ -938,3 +938,7 @@ Please use the following password to proceed to installation:
 ## docker swarm
 
 https://blog.51cto.com/ligeo5210/2304294
+
+https://zhuanlan.zhihu.com/p/25738959
+
+https://www.cnblogs.com/fundebug/p/6823897.html
