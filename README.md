@@ -56,17 +56,18 @@ yum list docker-ce.x86_64 --showduplicates|grep stable |sort -r
 
 **命令格式：yum install docker-ce-版本**
 
-yum install docker-ce-19.03.4-3.el7
+去掉前面的3:，取后面的19.03.8-3.el7为版本号
 
-### 启动docker
+yum install docker-ce-19.03.8-3.el7
 
-su - docker
+```
+docker-ce.x86_64            3:19.03.8-3.el7                     docker-ce-stable
+docker-ce.x86_64            3:19.03.7-3.el7                     docker-ce-stable
+```
 
-sudo systemctl start docker
 
-### 验证安装docker成功
 
-docker run hello-world
+
 
 ### 配置docker镜像下载阿里云加速
 
@@ -81,10 +82,6 @@ tee /etc/docker/daemon.json <<-'EOF'
 }
 
 EOF
-
-systemctl daemon-reload
-
-systemctl restart docker
 
 ### docker非root用户环境运行
 
@@ -117,6 +114,10 @@ USER noroot
 https://blog.csdn.net/yygydjkthh/article/details/47694929
 
 可以在宿主机上通过ps -ef|grep xxx，xxx为进程名，例如：nginx、redis等，来观察是否是非root用户启动docker.
+
+### 验证安装docker成功
+
+docker run hello-world
 
 ## 安装私有仓库(registry2)
 
@@ -936,6 +937,260 @@ Please use the following password to proceed to installation:
 
 
 ## docker swarm
+
+防火墙设置
+
+集群节点之间保证TCP 2377、TCP/UDP 7946和UDP 4789端口通信　　　
+
+　　　　TCP端口2377集群管理端口
+
+　　　　TCP与UDP端口7946节点之间通讯端口
+
+　　　　TCP与UDP端口4789 overlay网络通讯端口
+
+```shell
+firewall-cmd --permanent --add-rich-rule="rule family="ipv4" source address="10.60.9.156" port protocol="tcp" port="2377" accept"
+firewall-cmd --permanent --add-rich-rule="rule family="ipv4" source address="10.60.32.171" port protocol="tcp" port="2377" accept"
+firewall-cmd --permanent --add-rich-rule="rule family="ipv4" source address="10.60.32.197" port protocol="tcp" port="2377" accept"
+firewall-cmd --permanent --add-rich-rule="rule family="ipv4" source address="10.60.32.198" port protocol="tcp" port="2377" accept"
+
+firewall-cmd --permanent --add-rich-rule="rule family="ipv4" source address="10.60.9.156" port protocol="tcp" port="7946" accept"
+firewall-cmd --permanent --add-rich-rule="rule family="ipv4" source address="10.60.32.171" port protocol="tcp" port="7946" accept"
+firewall-cmd --permanent --add-rich-rule="rule family="ipv4" source address="10.60.32.197" port protocol="tcp" port="7946" accept"
+firewall-cmd --permanent --add-rich-rule="rule family="ipv4" source address="10.60.32.198" port protocol="tcp" port="7946" accept"
+
+firewall-cmd --permanent --add-rich-rule="rule family="ipv4" source address="10.60.9.156" port protocol="udp" port="7946" accept"
+firewall-cmd --permanent --add-rich-rule="rule family="ipv4" source address="10.60.32.171" port protocol="udp" port="7946" accept"
+firewall-cmd --permanent --add-rich-rule="rule family="ipv4" source address="10.60.32.197" port protocol="udp" port="7946" accept"
+firewall-cmd --permanent --add-rich-rule="rule family="ipv4" source address="10.60.32.198" port protocol="udp" port="7946" accept"
+
+firewall-cmd --permanent --add-rich-rule="rule family="ipv4" source address="10.60.9.156" port protocol="tcp" port="4789" accept"
+firewall-cmd --permanent --add-rich-rule="rule family="ipv4" source address="10.60.32.171" port protocol="tcp" port="4789" accept"
+firewall-cmd --permanent --add-rich-rule="rule family="ipv4" source address="10.60.32.197" port protocol="tcp" port="4789" accept"
+firewall-cmd --permanent --add-rich-rule="rule family="ipv4" source address="10.60.32.198" port protocol="tcp" port="4789" accept"
+
+firewall-cmd --permanent --add-rich-rule="rule family="ipv4" source address="10.60.9.156" port protocol="udp" port="4789" accept"
+firewall-cmd --permanent --add-rich-rule="rule family="ipv4" source address="10.60.32.171" port protocol="udp" port="4789" accept"
+firewall-cmd --permanent --add-rich-rule="rule family="ipv4" source address="10.60.32.197" port protocol="udp" port="4789" accept"
+firewall-cmd --permanent --add-rich-rule="rule family="ipv4" source address="10.60.32.198" port protocol="udp" port="4789" accept"
+
+firewall-cmd --reload
+
+firewall-cmd --list-all
+
+
+firewall-cmd --zone=public --add-port=2377/tcp --permanent
+firewall-cmd --zone=public --add-port=7946/tcp --permanent
+firewall-cmd --zone=public --add-port=7946/udp --permanent
+firewall-cmd --zone=public --add-port=4789/tcp --permanent
+firewall-cmd --zone=public --add-port=4789/udp --permanent
+firewall-cmd --reload
+```
+
+查看没有启动swarm状态
+
+```
+docker info |grep Swarm
+```
+
+Swarm: inactive
+
+
+
+创建管理节点
+
+```
+docker swarm init --advertise-addr 10.60.32.171
+```
+
+
+
+```
+Swarm initialized: current node (y2yx1q4xl13d0qy3z8r7jkejj) is now a manager.
+
+To add a worker to this swarm, run the following command:
+
+    docker swarm join --token SWMTKN-1-0t3pcrv3or46m7dk0oy3ksug1mdegkxx56enmid8pms0fdusz7-7fddh8srxf2c0za76dxix0mf3 10.60.32.171:2377
+
+To add a manager to this swarm, run 'docker swarm join-token manager' and follow the instructions.
+
+```
+
+查看已经启动了swarm状态
+
+```
+docker info |grep Swarm
+```
+
+Swarm: active
+
+
+
+docker node ls
+
+```
+ID                            HOSTNAME            STATUS              AVAILABILITY        MANAGER STATUS      ENGINE VERSION
+y2yx1q4xl13d0qy3z8r7jkejj *   docker1             Ready               Active              Leader              19.03.8
+```
+
+
+
+docker swarm join-token manager
+
+```
+docker swarm join --token SWMTKN-1-0t3pcrv3or46m7dk0oy3ksug1mdegkxx56enmid8pms0fdusz7-3au6r5wzoungnathvg3wihi1m 10.60.32.171:2377
+```
+
+
+
+docker swarm join-token worker
+
+```
+ docker swarm join --token SWMTKN-1-0t3pcrv3or46m7dk0oy3ksug1mdegkxx56enmid8pms0fdusz7-7fddh8srxf2c0za76dxix0mf3 10.60.32.171:2377
+```
+
+
+
+netstat -ant |grep 2377
+
+```
+tcp        0      0 10.60.32.197:34438      10.60.32.171:2377       ESTABLISHED
+tcp        0      0 10.60.32.197:51174      10.60.32.198:2377       ESTABLISHED
+tcp        0      0 10.60.32.197:34440      10.60.32.171:2377       ESTABLISHED
+tcp        0      0 10.60.32.197:2377       10.60.32.198:49256      ESTABLISHED
+tcp        0      0 10.60.32.197:2377       10.60.32.171:11868      ESTABLISHED
+
+```
+
+
+
+docker node ls
+
+```
+ID                            HOSTNAME            STATUS              AVAILABILITY        MANAGER STATUS      ENGINE VERSION
+y2yx1q4xl13d0qy3z8r7jkejj *   docker1             Ready               Active              Leader              19.03.8
+b9b4clmkye56ocrpmd685d9g0     docker2             Ready               Active              Reachable           19.03.8
+sziji8ytgac9wb7ql7e1xlphy     docker3             Ready               Active              Reachable           19.03.8
+
+```
+
+
+
+在3节点manager的情况下，如果两个节点down，则docker node ls命令：
+
+Error response from daemon: rpc error: code = Unknown desc = The swarm does not have a leader. It's possible that too few managers are online. Make sure more than half of the managers are online.
+
+
+
+配置代理
+
+```
+sudo mkdir -p /etc/systemd/system/docker.service.d
+sudo vi /etc/systemd/system/docker.service.d/http-proxy.conf
+设置代理服务器
+[Service]
+Environment="HTTP_PROXY=http://proxy_user:proxy_pass@proxy_server_ip:proxy_server_port"
+重启docker
+sudo systemctl daemon-reload
+sudo systemctl restart docker
+查看配置
+systemctl show --property=Environment docker
+验证
+docker search nginx
+
+```
+
+
+
+创建网络
+
+docker network create --subnet=192.168.5.0/24 -d overlay net168-5
+
+查看
+
+docker network ls
+
+多出一个
+
+```
+fpfbg9hho9bw        net168-5            overlay             swarm
+
+```
+
+
+
+三节点部署
+
+docker service create --name nginx --publish 80:80 --network net168-5 --replicas 3 nginx
+
+```
+overall progress: 3 out of 3 tasks 
+1/3: running   [==================================================>] 
+2/3: running   [==================================================>] 
+3/3: running   [==================================================>] 
+verify: Service converged 
+
+```
+
+验证，查看三个节点的nginx
+
+```
+docker ps
+```
+
+http请求访问这三个节点
+
+
+
+服务管理
+
+停止服务
+
+**docker service rm xxxxx**
+
+
+
+docker service create --name nginx --publish 80:80 --network net168-5 --replicas 3 --mount type=volume,src=/data/nginx/conf/nginx.conf,dst=/etc/nginx/nginx.conf nginx
+
+
+
+docker service create --name nginx --publish 80:80 --network net168-5 --replicas 3 -v /data/nginx/conf/nginx.conf:/etc/nginx/nginx.conf  -v /data/nginx/logs:/var/log/nginx nginx
+
+
+
+docker run --name nginx -d --net host -v /data/nginx/conf/nginx.conf:/etc/nginx/nginx.conf  -v /data/nginx/logs:/var/log/nginx nginx
+
+
+
+/home/nginx/nginx
+
+
+
+docker service create --mount type=bind,src=宿主目录,dst=容器目录
+
+
+
+
+
+
+
+
+
+docker service create --name nginx --publish 80:80 --network net168-5 --replicas 3 --mount  type=bind,src=/home/nginx/nginx/nginx.conf,dst=/etc/nginx/nginx.conf nginx
+
+
+
+
+
+docker service create --name=mynginx --mount type=volume,source=/etc/nginx/conf,target=/usr/local/nginx/conf --publish-add published=80,target=80 docker.io/nginx
+
+
+
+```
+docker service create --name nginx --publish 80:80 --network net168-5 --replicas 3 --mount type=bind,src=/home/docker/nginx.conf,dst=/etc/nginx/nginx.conf  --mount type=bind,src=/home/docker/nginx_log,dst=/var/log/nginx  nginx
+```
+
+
 
 https://blog.51cto.com/ligeo5210/2304294
 
