@@ -65,10 +65,6 @@ docker-ce.x86_64            3:19.03.8-3.el7                     docker-ce-stable
 docker-ce.x86_64            3:19.03.7-3.el7                     docker-ce-stable
 ```
 
-
-
-
-
 ### 配置docker镜像下载阿里云加速
 
 mkdir -p /etc/docker
@@ -93,7 +89,7 @@ root用户 passwd docker
 
 su - docker
 
-sudo systemctl restart docker
+firewall-cmd --permanent --add-port=80/tcp
 
 如果普通用户执行docker命令，如果提示get …… dial unix /var/run/docker.sock权限不够，则修改/var/run/docker.sock权限
 使用root用户执行如下命令，即可
@@ -127,31 +123,31 @@ docker run hello-world
 
 vi /etc/hosts
 
-192.168.5.78	dyit.com
+192.168.5.76	dockerdongyuit.cn
 
-这里的192.168.5.78为本机ip地址
+这里的192.168.5.76为本机ip地址
 
 ### 安装证书(支持ssl)
 
-mkdir -p /registry2/certs/
+mkdir -p /home/docker/registry2/certs/
 
- openssl req -newkey rsa:2048 -nodes -sha256 -keyout /registry2/certs/domain.key -x509 -days 365 -out /registry2/certs/domain.crt
+ openssl req -newkey rsa:2048 -nodes -sha256 -keyout /home/docker/registry2/certs/domain.key -x509 -days 3650 -out /home/docker/registry2/certs/domain.crt
 
 ```
 Country Name (2 letter code) [XX]:CN
 
-State or Province Name (full name) []:Liaoning
+State or Province Name (full name) []:liaoning
 
 Locality Name (eg, city) [Default City]:shenyang
 
-Organization Name (eg, company) [Default Company Ltd]:dyit
+Organization Name (eg, company) [Default Company Ltd]:dongyuit
 
 Organizational Unit Name (eg, section) []:dev
 
-Common Name (eg, your name or your server's hostname) []:dyit.com
+Common Name (eg, your name or your server's hostname) []:dockerdongyuit.cn
 ```
 
- 生成两个文件:ll /registry2/certs/
+ 生成两个文件:ll /home/docker/registry2/certs/
 
 -rw-r--r--. 1 root root 2065 11月  6 15:43 domain.crt
 
@@ -159,26 +155,46 @@ Common Name (eg, your name or your server's hostname) []:dyit.com
 
 ### 创建密码文件
 
-mkdir -p /registry2/auth/
+mkdir -p /home/docker/registry2/auth/
 
-docker run --entrypoint htpasswd registry:2 -Bbn heige Heige531 >> /registry2/auth/htpasswd
+docker run --entrypoint htpasswd registry:2 -Bbn heige 12345678 >>    /home/docker/registry2/auth/htpasswd
 
-这里的heige为用户名,Heige531为密码.
+这里的heige为用户名,12345678为密码.
 
 ### 创建数据存放目录
 
-mkdir /registry2/data
+mkdir /home/docker/registry2/data
 
 ### 启动Secure Registry
 
+#### docker swarm mode模式
+
+注意：--constraint node.labels.test-host:test2 配置，通过label指定了registry部署在集群中的某个机器，例如：本配置指定了部署在test-host:test2的label机器上，因为这个test-host:test2只在docker2的机器上配置了，因此registry2会被swarm部署到docker2上。
+
+```shell
+docker service create --name registry --publish 5000:5000 \
+--mount type=bind,src=/home/docker/registry2/auth,dst=/auth \
+-e "REGISTRY_AUTH=htpasswd" \
+-e "REGISTRY_AUTH_HTPASSWD_REALM=Registry Realm" \
+-e "REGISTRY_AUTH_HTPASSWD_PATH=/auth/htpasswd" \
+--mount type=bind,src=/home/docker/registry2/data,dst=/var/lib/registry \
+--mount type=bind,src=/home/docker/registry2/certs,dst=/certs \
+-e REGISTRY_HTTP_TLS_CERTIFICATE=/certs/domain.crt \
+-e REGISTRY_HTTP_TLS_KEY=/certs/domain.key \
+--constraint node.labels.test-host==test2 \
+registry:2 
+```
+
+#### 某个docker启动
+
 ```shell
   docker run -d -p 5000:5000 --restart=always --name registry \
-  -v /registry2/auth:/auth \
+  -v /home/docker/registry2/auth:/auth \
   -e "REGISTRY_AUTH=htpasswd" \
   -e "REGISTRY_AUTH_HTPASSWD_REALM=Registry Realm" \
-  -e REGISTRY_AUTH_HTPASSWD_PATH=/auth/htpasswd \
-  -v /registry2/data:/var/lib/registry \
-  -v /registry2/certs:/certs \
+  -e "REGISTRY_AUTH_HTPASSWD_PATH=/auth/htpasswd" \
+  -v /home/docker/registry2/data:/var/lib/registry \
+  -v /home/docker/registry2/certs:/certs \
   -e REGISTRY_HTTP_TLS_CERTIFICATE=/certs/domain.crt \
   -e REGISTRY_HTTP_TLS_KEY=/certs/domain.key \
   registry:2 
@@ -192,7 +208,7 @@ mkdir /registry2/data
 
 --name 容器实例名
 
--v /registry2/auth:/auth \ 映射宿主/registry2/auth目录到容器的/auth目录
+-v /home/docker/registry2/auth:/auth \ 映射宿主/home/docker/registry2/auth目录到容器的/auth目录
 
 如下三个指定了认证方式和密码文件位置
 
@@ -200,11 +216,11 @@ mkdir /registry2/data
 
 -e "REGISTRY_AUTH_HTPASSWD_REALM=Registry Realm" \
 
--e REGISTRY_AUTH_HTPASSWD_PATH=/auth/htpasswd \
+-e "REGISTRY_AUTH_HTPASSWD_PATH=/auth/htpasswd" \
 
--v /registry2/data:/var/lib/registry \ 映射宿主/registry2/data/目录到容器的/var/lib/registry（存储仓库）
+-v /home/docker/registry2/data:/var/lib/registry \ 映射宿主/home/docker/registry2/data/目录到容器的/var/lib/registry（存储仓库）
 
--v /registry2/certs:/certs \ 映射宿主/registry2/certs目录到容器的/certs目录
+-v /home/docker/registry2/certs:/certs \ 映射宿主/registry2/certs目录到容器的/certs目录
 
 设置TLS认证文件位置
 
@@ -222,11 +238,11 @@ registry:2
 
 重新制作一个hello-word的tag
 
-docker tag hello-world dyit.com:5000/hello-world
+docker tag hello-world dockerdongyuit.cn:5000/hello-world
 
 发布到仓库
 
-docker push dyit.com:5000/hello-world
+docker push dockerdongyuit.cn:5000/hello-world
 
 报错：
 
@@ -237,21 +253,21 @@ Get https://dyit.com:5000/v2/: x509: certificate signed by unknow authority
 
 push失败了！从错误日志来看，docker client认为server传输过来的证书的签署方是一个unknown authority（未知的CA），因此验证失败。我们需要让docker client安装我们的CA证书：
 
-mkdir -p /etc/docker/certs.d/dyit.com:5000
+sudo mkdir -p /etc/docker/certs.d/dockerdongyuit.cn:5000
 
-cp /registry2/certs/domain.crt /etc/docker/certs.d/dyit.com:5000/ca.crt
+sudo cp /home/docker/registry2/certs/domain.crt /etc/docker/certs.d/dockerdongyuit.cn:5000/ca.crt
 
-重新启动docker环境
+~~重新启动docker环境~~
 
-service docker restart
+~~sudo systemctl restart docker~~
 
 重试发布到仓库，提示(no basic auth credentials)
 
-docker push dyit.com:5000/hello-world
+docker push dockerdongyuit.cn:5000/hello-world
 
 ### 测试发布到私有仓库(no basic auth credentials)
 
-docker push dyit.com:5000/hello-world
+docker push dockerdongyuit.cn:5000/hello-world
 
 ```
 The push refers to repository [dyit.com:5000/hello-world]
@@ -263,7 +279,7 @@ push失败了！提示没有basic auth认证。
 
 **认证登录**
 
-docker login dyit.com:5000
+docker login  dockerdongyuit.cn:5000
 
 正确输入用户名和密码
 
@@ -277,7 +293,7 @@ Login Succeeded
 
 **重试发布到仓库，成功**
 
-docker push dyit.com:5000/hello-world
+docker login  dockerdongyuit.cn:5000
 
 ### 客户端访问私有仓库(客户端)
 
@@ -289,45 +305,61 @@ docker push dyit.com:5000/hello-world
 
 vi /etc/hosts
 
-192.168.5.78	dyit.com
+192.168.5.76	dockerdongyuit.cn
 
  **拷贝crt文件**
 
-mkdir -p /etc/docker/certs.d/dyit.com:5000   
+sudo mkdir -p /etc/docker/certs.d/dockerdongyuit.cn:5000
 
-cp /registry2/certs/domain.crt /etc/docker/certs.d/dyit.com:5000/ca.crt  # 注意docker私有仓库上的domain.crt文件
+sudo cp /home/docker/registry2/certs/domain.crt /etc/docker/certs.d/dockerdongyuit.cn:5000/ca.crt
+
+注意docker私有仓库上的domain.crt文件
 
 **认证登录**
 
-docker login dyit.com:5000
+docker login  dockerdongyuit.cn:5000
 
 **从私有仓库中拉去hello-world到本地**
 
-docker run dyit.com:5000/hello-world 
+docker login  dockerdongyuit.cn:5000
 
 ```
 Pull Completed
 ```
 
-### 浏览器查看仓库内容
+### 私有仓库操作
 
-https://192.168.1.250:5000/v2/_catalog
+#### 列出仓库镜像
 
-输入用户名和密码，heige，Heige531
+https://dockerdongyuit.cn:5000/v2/_catalog
+
+输入用户名和密码，heige，12345678
+
+#### 查看某个镜像
+
+https://dockerdongyuit.cn:5000/v2/<name>/tags/list
+
+输入用户名和密码，heige，12345678
+
+例如：
+
+```
+https://dockerdongyuit.cn:5000/v2/centos/tags/list
+```
 
 ## windows客户端(eclipse maven发布docker)
 
 ### 安装证书
 
-**修改host文件，加入dyit.com**
+**修改host文件，加入dockerdongyuit.cn**
 
-192.168.1.250	dyit.com
+192.168.5.76	dockerdongyuit.cn
 
 **安装证书**
 
-从私有仓库服务器上拷贝/registry2/certs/domain.crt到windows桌面(sz /registry2/certs/domain.crt)，双击这个domain.crt文件安装证书，将其安装到“安装证书->将所有的证书存放到下列存储(P)->受信任的根证书颁发机构”下。
+从私有仓库服务器上拷贝/home/docker/registry2/certs/domain.crt到windows桌面(sz /registry2/certs/domain.crt)，双击这个domain.crt文件安装证书，将其安装到“安装证书->将所有的证书存放到下列存储(P)->受信任的根证书颁发机构”下。
 
-https://dyit.com:5000/v2/_catalog
+https://dockerdongyuit.cn:5000/v2/_catalog
 
 ### 仓库服务器端开启2375端口
 
@@ -350,9 +382,9 @@ ExecStart=/usr/bin/dockerd -H tcp://0.0.0.0:2375 -H unix://var/run/docker.sock
 ExecStart=/usr/bin/dockerd -H tcp://0.0.0.0:2375 -H unix://var/run/docker.sock
 ```
 
-systemctl daemon-reload // 加载docker守护线程
+sudo systemctl daemon-reload // 加载docker守护线程
 
-systemctl restart docker // 重启docker
+sudo systemctl restart docker // 重启docker
 
 查看2375端口是否开启。
 
@@ -360,7 +392,7 @@ netstat -ntlp|grep 2375
 
 ### 设置windows环境变量DOCKER_HOST
 
-windows加入系统环境变量，名称：DOCKER_HOST，值：tcp://dyit.com:2375
+windows加入系统环境变量，名称：DOCKER_HOST，值：tcp://dockerdongyuit.cn:2375
 
 注意设置后，响应的cmd shell窗口和eclipse都要重新启动，否则无法正确的获取到这个环境变量。
 
@@ -373,9 +405,9 @@ Eclipse下设置settings.xml文件，添加server，如下：
 ```xml
   <servers>
 	<server>
-		<id>dyit.com:5000</id>
+		<id>dockerdongyuit.cn:5000</id>
 		<username>heige</username>
-		<password>Heige531</password>
+		<password>12345678</password>
 		<configuration>
 			<email>909933699@qq.com</email>
 		</configuration>
@@ -405,9 +437,8 @@ Eclipse下设置settings.xml文件，添加server，如下：
 				<version>0.4.13</version>
 				<configuration>
 					<!-- 访问 docker api 端口 -->
-					<dockerHost>http://dyit.com:2375</dockerHost>
-					<!-- dyit.com:5000为仓库地址 -->
-					<imageName>dyit.com:5000/dy/${project.name}:${project.version}</imageName>
+					<dockerHost>http://dockerdongyuit.cn:2375</dockerHost>
+					<!-- dyit.com:5000为仓库地址 -->					<imageName>dockerdongyuit.cn:5000/dy/${project.name}:${project.version}</imageName>
 					<!-- 使用的基础镜像,生成Dockerfile的FROM指令 -->
 					<baseImage>base/java:1.8</baseImage>
 					<!-- docker启动后执行的命令,生成Dockerfile的ENTRYPOINT指令 -->
@@ -423,7 +454,7 @@ Eclipse下设置settings.xml文件，添加server，如下：
 					<!-- 覆盖相同tag的镜像(支持重复发布) -->
 					<forceTags>true</forceTags>
 					<!-- Basic auth 的配置，见settings.xml配置  -->
-					<serverId>dyit.com:5000</serverId>
+					<serverId>dockerdongyuit.cn:5000</serverId>
 				</configuration>
 			</plugin>						
 		</plugins>
@@ -440,7 +471,7 @@ Eclipse下设置settings.xml文件，添加server，如下：
 
  对应docker的运行命令如下：
 
-run -itd --cap-add=SYS_PTRACE --name sc-config1 --net host -e JAVA_OPTS="-Xms1g -Xmx1g -XX:+UseParNewGC -XX:+UseConcMarkSweepGC" -e APP_ENV="--spring.profiles.active=dev --server.port=6000" dyit.com:5000/sc/sc-config:1.0.1 /bin/bash
+run -itd --cap-add=SYS_PTRACE --name sc-config1 --net host -e JAVA_OPTS="-Xms1g -Xmx1g -XX:+UseParNewGC -XX:+UseConcMarkSweepGC" -e APP_ENV="--spring.profiles.active=dev --server.port=6000" dockerdongyuit.cn:5000/sc/sc-config:1.0.1 /bin/bash
 
 解释上面命令：
 
@@ -488,7 +519,39 @@ docker inspect jenkins/jenkins | grep User
 
 ## docker 镜像
 
+### 查找镜像
+
+https://hub.docker.com/
+
+### 命令
+
+docker search xxx，不要盲目的相信这个命令了，还是使用上面的https://hub.docker.com/先查询一下比较好。
+
 ### centos7中文基础镜像
+
+注意：centos8使用如下脚本报错。
+
+#### 准备
+
+下载对于的版本的centos，例如：7.8.2003
+
+```
+docker pull centos:7.8.2003
+```
+
+打标签为私有仓库
+
+```shell
+docker tag centos:7.8.2003 dockerdongyuit.cn:5000/centos:7.8.2003
+```
+
+存放到私有仓库
+
+```
+docker push  dockerdongyuit.cn:5000/centos:7.8.2003
+```
+
+#### 编辑Dockerfile
 
 vi Dockerfile
 
@@ -499,7 +562,7 @@ Dockerfile内容
 # Author: heige
 
 #基础镜像
-FROM centos:7
+FROM dockerdongyuit.cn:5000/centos:7.8.2003
 
 #作者
 MAINTAINER Heige <909933699@qq.com>
@@ -528,11 +591,17 @@ ENV LC_ALL zh_CN.utf8
 ENV LANG zh_CN.utf8
 ```
 
+#### 构建和发布到私有仓库
+
 docker build -t base/centos7zh:1.0.1 .
+
+docker tag base/centos7zh:1.0.1 dockerdongyuit.cn:5000/centos7zh:1.0.1
+
+docker push  dockerdongyuit.cn:5000/centos7zh:1.0.1
 
 ### centos7zh+jdk1.8镜像
 
-**依赖**
+#### 准备
 
 Dockerfile目录下依赖于jdk目录，这个文件可以从通过tar -zxvf jdk-8u192-linux-x64.tar.gz解压获取到jdk目录。
 
@@ -544,7 +613,7 @@ vi Dockerfile
 # Author: heige
 
 #基础镜像
-FROM base/centos7zh:1.0.1
+FROM dockerdongyuit.cn:5000/centos7zh:1.0.1
 
 #作者
 MAINTAINER Heige <909933699@qq.com>
@@ -564,7 +633,9 @@ ENV CLASSPATH .:$JAVA_HOME/lib/dt.jar:$JAVA_HOME/lib/tools.jar
 
 docker build -t base/java:1.8 .
 
+docker tag base/java:1.8 dockerdongyuit.cn:5000/java:1.8
 
+docker push  dockerdongyuit.cn:5000/java:1.8
 
 ### redis镜像
 
@@ -782,6 +853,53 @@ http {
     #gzip  on;
 
     #include /etc/nginx/conf.d/*.conf; 注意：注释掉这个，否则你要仔细阅读这个目录下的default.conf文件内容
+    # 添加内容
+    
+    server {
+        listen       80;
+        server_name  localhost;
+
+        #charset koi8-r;
+        #access_log  /var/log/nginx/host.access.log  main;
+
+        location / {
+            root   /usr/share/nginx/html;
+            index  index.html index.htm;
+        }
+
+        #error_page  404              /404.html;
+
+        # redirect server error pages to the static page /50x.html
+        #
+        error_page   500 502 503 504  /50x.html;
+        location = /50x.html {
+            root   /usr/share/nginx/html;
+        }
+
+        # proxy the PHP scripts to Apache listening on 127.0.0.1:80
+        #
+        #location ~ \.php$ {
+        #    proxy_pass   http://127.0.0.1;
+        #}
+
+        # pass the PHP scripts to FastCGI server listening on 127.0.0.1:9000
+        #
+        #location ~ \.php$ {
+        #    root           html;
+        #    fastcgi_pass   127.0.0.1:9000;
+        #    fastcgi_index  index.php;
+        #    fastcgi_param  SCRIPT_FILENAME  /scripts$fastcgi_script_name;
+        #    include        fastcgi_params;
+        #}
+
+        # deny access to .htaccess files, if Apache's document root
+        # concurs with nginx's one
+        #
+        #location ~ /\.ht {
+        #    deny  all;
+        #}
+    }
+    
 }
 ```
 
@@ -938,47 +1056,17 @@ Please use the following password to proceed to installation:
 
 ## docker swarm
 
-防火墙设置
+### 防火墙设置
 
-集群节点之间保证TCP 2377、TCP/UDP 7946和UDP 4789端口通信　　　
+集群节点之间保证TCP 2377、TCP/UDP 7946和UDP 4789端口通信;
 
-　　　　TCP端口2377集群管理端口
+TCP端口2377集群管理端口;
 
-　　　　TCP与UDP端口7946节点之间通讯端口
+TCP与UDP端口7946节点之间通讯端口;
 
-　　　　TCP与UDP端口4789 overlay网络通讯端口
+TCP与UDP端口4789 overlay网络通讯端口;
 
 ```shell
-firewall-cmd --permanent --add-rich-rule="rule family="ipv4" source address="10.60.9.156" port protocol="tcp" port="2377" accept"
-firewall-cmd --permanent --add-rich-rule="rule family="ipv4" source address="10.60.32.171" port protocol="tcp" port="2377" accept"
-firewall-cmd --permanent --add-rich-rule="rule family="ipv4" source address="10.60.32.197" port protocol="tcp" port="2377" accept"
-firewall-cmd --permanent --add-rich-rule="rule family="ipv4" source address="10.60.32.198" port protocol="tcp" port="2377" accept"
-
-firewall-cmd --permanent --add-rich-rule="rule family="ipv4" source address="10.60.9.156" port protocol="tcp" port="7946" accept"
-firewall-cmd --permanent --add-rich-rule="rule family="ipv4" source address="10.60.32.171" port protocol="tcp" port="7946" accept"
-firewall-cmd --permanent --add-rich-rule="rule family="ipv4" source address="10.60.32.197" port protocol="tcp" port="7946" accept"
-firewall-cmd --permanent --add-rich-rule="rule family="ipv4" source address="10.60.32.198" port protocol="tcp" port="7946" accept"
-
-firewall-cmd --permanent --add-rich-rule="rule family="ipv4" source address="10.60.9.156" port protocol="udp" port="7946" accept"
-firewall-cmd --permanent --add-rich-rule="rule family="ipv4" source address="10.60.32.171" port protocol="udp" port="7946" accept"
-firewall-cmd --permanent --add-rich-rule="rule family="ipv4" source address="10.60.32.197" port protocol="udp" port="7946" accept"
-firewall-cmd --permanent --add-rich-rule="rule family="ipv4" source address="10.60.32.198" port protocol="udp" port="7946" accept"
-
-firewall-cmd --permanent --add-rich-rule="rule family="ipv4" source address="10.60.9.156" port protocol="tcp" port="4789" accept"
-firewall-cmd --permanent --add-rich-rule="rule family="ipv4" source address="10.60.32.171" port protocol="tcp" port="4789" accept"
-firewall-cmd --permanent --add-rich-rule="rule family="ipv4" source address="10.60.32.197" port protocol="tcp" port="4789" accept"
-firewall-cmd --permanent --add-rich-rule="rule family="ipv4" source address="10.60.32.198" port protocol="tcp" port="4789" accept"
-
-firewall-cmd --permanent --add-rich-rule="rule family="ipv4" source address="10.60.9.156" port protocol="udp" port="4789" accept"
-firewall-cmd --permanent --add-rich-rule="rule family="ipv4" source address="10.60.32.171" port protocol="udp" port="4789" accept"
-firewall-cmd --permanent --add-rich-rule="rule family="ipv4" source address="10.60.32.197" port protocol="udp" port="4789" accept"
-firewall-cmd --permanent --add-rich-rule="rule family="ipv4" source address="10.60.32.198" port protocol="udp" port="4789" accept"
-
-firewall-cmd --reload
-
-firewall-cmd --list-all
-
-
 firewall-cmd --zone=public --add-port=2377/tcp --permanent
 firewall-cmd --zone=public --add-port=7946/tcp --permanent
 firewall-cmd --zone=public --add-port=7946/udp --permanent
@@ -995,28 +1083,15 @@ docker info |grep Swarm
 
 Swarm: inactive
 
+### 初始化管理节点
 
-
-创建管理节点
-
-```
-docker swarm init --advertise-addr 10.60.32.171
-```
-
-
+--advertise-addr 指定了对外提供集群管理的ip地址。
 
 ```
-Swarm initialized: current node (y2yx1q4xl13d0qy3z8r7jkejj) is now a manager.
-
-To add a worker to this swarm, run the following command:
-
-    docker swarm join --token SWMTKN-1-0t3pcrv3or46m7dk0oy3ksug1mdegkxx56enmid8pms0fdusz7-7fddh8srxf2c0za76dxix0mf3 10.60.32.171:2377
-
-To add a manager to this swarm, run 'docker swarm join-token manager' and follow the instructions.
-
+docker swarm init --advertise-addr 192.168.5.75
 ```
 
-查看已经启动了swarm状态
+**查看已经启动了swarm状态**
 
 ```
 docker info |grep Swarm
@@ -1024,7 +1099,7 @@ docker info |grep Swarm
 
 Swarm: active
 
-
+**查看节点的状态**
 
 docker node ls
 
@@ -1033,56 +1108,73 @@ ID                            HOSTNAME            STATUS              AVAILABILI
 y2yx1q4xl13d0qy3z8r7jkejj *   docker1             Ready               Active              Leader              19.03.8
 ```
 
+### 加入管理节点
 
+在上面**初始化管理节点**的服务器执行如下命令，输出的内容就要加入要执行的命令，在要加入的服务器节点上执行。
 
 docker swarm join-token manager
 
 ```
-docker swarm join --token SWMTKN-1-0t3pcrv3or46m7dk0oy3ksug1mdegkxx56enmid8pms0fdusz7-3au6r5wzoungnathvg3wihi1m 10.60.32.171:2377
+docker swarm join --token SWMTKN-1-0iao02t4cq9mn709031gzg6p2e6v582mhcoorofzc5p27a0avx-cxmy21fwmyh80ykwwu0svxiys 192.168.5.75:2377
 ```
 
+### 加入工作节点
 
+在上面**初始化管理节点**的服务器执行如下命令，输出的内容就要加入要执行的命令，在要加入的服务器节点上执行。
 
 docker swarm join-token worker
 
 ```
- docker swarm join --token SWMTKN-1-0t3pcrv3or46m7dk0oy3ksug1mdegkxx56enmid8pms0fdusz7-7fddh8srxf2c0za76dxix0mf3 10.60.32.171:2377
+docker swarm join --token SWMTKN-1-0iao02t4cq9mn709031gzg6p2e6v582mhcoorofzc5p27a0avx-d256tdlucfbc3zs0tb3boralv 192.168.5.75:2377
 ```
 
-
-
-netstat -ant |grep 2377
-
-```
-tcp        0      0 10.60.32.197:34438      10.60.32.171:2377       ESTABLISHED
-tcp        0      0 10.60.32.197:51174      10.60.32.198:2377       ESTABLISHED
-tcp        0      0 10.60.32.197:34440      10.60.32.171:2377       ESTABLISHED
-tcp        0      0 10.60.32.197:2377       10.60.32.198:49256      ESTABLISHED
-tcp        0      0 10.60.32.197:2377       10.60.32.171:11868      ESTABLISHED
-
-```
-
-
+### 查看节点状态
 
 docker node ls
 
+MANAGER STATUS状态说明：
+
+Leader表示当前的管理者；
+
+Reachable表示后补管理者；
+
+空状态表示为工作节点；
+
 ```
 ID                            HOSTNAME            STATUS              AVAILABILITY        MANAGER STATUS      ENGINE VERSION
-y2yx1q4xl13d0qy3z8r7jkejj *   docker1             Ready               Active              Leader              19.03.8
-b9b4clmkye56ocrpmd685d9g0     docker2             Ready               Active              Reachable           19.03.8
-sziji8ytgac9wb7ql7e1xlphy     docker3             Ready               Active              Reachable           19.03.8
+mqn2hfdkanon8gknyhujaq64g *   docker1             Ready               Active              Leader              19.03.8
+8lpn6i5wjsgprizf0ovll2xhh     docker2             Ready               Active              Reachable           19.03.8
+ua3ihfmaq0izhjwfjwbxk5rlg     docker3             Ready               Active              Reachable           19.03.8
 
 ```
 
+**加入管理节点的服务器上都会开启2377端口用户集群管理**
 
+docker1是执行netstat -ant |grep 2377
 
-在3节点manager的情况下，如果两个节点down，则docker node ls命令：
+```
+tcp        0      0 192.168.5.75:37414      192.168.5.76:2377       ESTABLISHED
+tcp        0      0 192.168.5.75:14936      192.168.5.77:2377       ESTABLISHED
+```
 
-Error response from daemon: rpc error: code = Unknown desc = The swarm does not have a leader. It's possible that too few managers are online. Make sure more than half of the managers are online.
+docker2是执行netstat -ant |grep 2377
 
+```
+tcp        0      0 192.168.5.76:36970      192.168.5.75:2377       ESTABLISHED
+tcp        0      0 192.168.5.76:36972      192.168.5.75:2377       ESTABLISHED
+tcp        0      0 192.168.5.76:55988      192.168.5.77:2377       ESTABLISHED
+```
 
+docker3是执行netstat -ant |grep 2377
 
-配置代理
+```
+tcp        0      0 192.168.5.77:28908      192.168.5.75:2377       ESTABLISHED
+tcp        0      0 192.168.5.77:5468       192.168.5.76:2377       ESTABLISHED
+tcp        0      0 192.168.5.77:28912      192.168.5.75:2377       ESTABLISHED
+
+```
+
+### pull配置代理
 
 ```
 sudo mkdir -p /etc/systemd/system/docker.service.d
@@ -1100,9 +1192,7 @@ docker search nginx
 
 ```
 
-
-
-创建网络
+### 创建网络
 
 docker network create --subnet=192.168.5.0/24 -d overlay net168-5
 
@@ -1114,12 +1204,9 @@ docker network ls
 
 ```
 fpfbg9hho9bw        net168-5            overlay             swarm
-
 ```
 
-
-
-三节点部署
+### 三节点部署nginx例子
 
 docker service create --name nginx --publish 80:80 --network net168-5 --replicas 3 nginx
 
@@ -1140,33 +1227,67 @@ docker ps
 
 http请求访问这三个节点
 
+### 服务管理
+
+#### 创建服务
+
+```
+create service create xxxx
+```
+
+##### 绑定宿主目录到docker容器目录
+
+```
+--mount type=bind,src=宿主目录,dst=容器目录
+```
+
+#### 发布配置
+
+例如：下面把nginx.conf文件创建为一个**配置**
+
+```
+docker config create nginx-conf ./nginx/nginx.conf
+```
+
+这里会在集群中发布3个nginx，每个都使用上面创建的配置。
+
+```
+docker service create --name nginx --publish 80:8080 --network net168-1 --config source=nginx-conf --replicas 3 nginx
+```
+
+#### 发布标记
+
+基于特定标记的发布，例如：把指定的镜像发布到拥有某个标记的机器上，例如：只发布到生产环境的机器上。
+
+例如：先创建生产环境标记，标记是以key和value的格式出现的。如下env=proc为添加的标记，docker1集群上的某个nodeId。
+
+```
+docker node update --label-add env=proc docker1
+```
+
+发布nginx到生产环境，这里主要：--constraint node.labels.env==proc，指定了标记条件env==proc
+
+```
+docker service create --name nginx --publish 80:8080 --network net168-1 --config source=nginx-conf --replicas 3 --constraint node.labels.env==proc nginx
+```
 
 
-服务管理
 
-停止服务
+#### 停止服务
 
-**docker service rm xxxxx**
-
-
-
-docker service create --name nginx --publish 80:80 --network net168-5 --replicas 3 --mount type=volume,src=/data/nginx/conf/nginx.conf,dst=/etc/nginx/nginx.conf nginx
+```
+docker service rm xxxxx
+```
 
 
 
-docker service create --name nginx --publish 80:80 --network net168-5 --replicas 3 -v /data/nginx/conf/nginx.conf:/etc/nginx/nginx.conf  -v /data/nginx/logs:/var/log/nginx nginx
+### 查看服务日志
+
+```
+docker service logs xxxx 
+```
 
 
-
-docker run --name nginx -d --net host -v /data/nginx/conf/nginx.conf:/etc/nginx/nginx.conf  -v /data/nginx/logs:/var/log/nginx nginx
-
-
-
-/home/nginx/nginx
-
-
-
-docker service create --mount type=bind,src=宿主目录,dst=容器目录
 
 
 
@@ -1191,6 +1312,64 @@ docker service create --name nginx --publish 80:80 --network net168-5 --replicas
 ```
 
 
+
+### 命令
+
+#### 打标记
+
+```
+docker node update --label-add [标签] [节点名]
+docker node update --label-rm [标签] [节点名]
+docker node inspect -f {{".Spec.Labels"}} [节点名]
+```
+
+##### 加标记
+
+例如：为节点docker1，加一个env-proc=1(KV结构)的标记
+
+```
+docker node update --label-rm env-proc=1 docker1
+```
+
+##### 删标记
+
+例如：去掉节点docker1上的env=proc为key的标记
+
+```
+docker node update --label-rm env-proc docker1
+```
+
+##### 查看节点上的标记
+
+```
+docker node inspect -f {{".Spec.Labels"}} docker1 
+```
+
+## 安全
+
+### 只允许用户访问一个特定的容器
+
+```
+更强的安全性
+如果你打算只允许用户访问一个特定的容器，你可以写一个简单的脚本:
+
+cat /usr/bin/docker-fedora
+#!/bin/sh
+docker run -ti --rm fedora /bin/sh
+写好脚本之后，配置sudoers：
+
+grep dwalsh /etc/sudoers
+dwalsh        ALL=(ALL)       NOPASSWD: /usr/bin/docker-fedora
+这个用户将仅能在没有权限限制下运行Fedora容器。
+```
+
+
+
+### FAQ
+
+在3节点manager的情况下，如果两个节点down，则docker node ls命令：
+
+Error response from daemon: rpc error: code = Unknown desc = The swarm does not have a leader. It's possible that too few managers are online. Make sure more than half of the managers are online.
 
 https://blog.51cto.com/ligeo5210/2304294
 
