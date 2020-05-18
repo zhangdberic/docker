@@ -81,15 +81,23 @@ EOF
 
 ### docker非root用户环境运行
 
-useradd docker -g docker
+#### 创建docker用户
 
-docker用户加入到sudo中
+useradd docker -g docker
 
 root用户 passwd docker
 
+#### sudo docker用户
+
+visudo
+
+docker用户加入到sudo中
+
+#### 启动docker服务
+
 su - docker
 
-firewall-cmd --permanent --add-port=80/tcp
+sudo systemctl start docker
 
 如果普通用户执行docker命令，如果提示get …… dial unix /var/run/docker.sock权限不够，则修改/var/run/docker.sock权限
 使用root用户执行如下命令，即可
@@ -97,19 +105,6 @@ firewall-cmd --permanent --add-port=80/tcp
 ```
 sudo chmod a+rw /var/run/docker.sock
 ```
-
-Dockerfile文件加入如下两个指令，在dockerfile的FROM指令后，ENTRYPOINT指令前：
-
-```dockerfile
-RUN useradd noroot -u 1000 -s /bin/bash
-USER noroot
-```
-
-这里的-u指定了用户的sid，这里统一设置为1000，如果你的宿主机需要挂载目录到镜像，则你的宿主机挂载的目录需要，指定1000为拥有者。例如：chown -R 1000:1000 /data/jenkins_home
-
-https://blog.csdn.net/yygydjkthh/article/details/47694929
-
-可以在宿主机上通过ps -ef|grep xxx，xxx为进程名，例如：nginx、redis等，来观察是否是非root用户启动docker.
 
 ### 验证安装docker成功
 
@@ -167,25 +162,7 @@ mkdir /home/docker/registry2/data
 
 ### 启动Secure Registry
 
-#### docker swarm mode模式
-
-注意：--constraint node.labels.test-host:test2 配置，通过label指定了registry部署在集群中的某个机器，例如：本配置指定了部署在test-host:test2的label机器上，因为这个test-host:test2只在docker2的机器上配置了，因此registry2会被swarm部署到docker2上。
-
-```shell
-docker service create --name registry --publish 5000:5000 \
---mount type=bind,src=/home/docker/registry2/auth,dst=/auth \
--e "REGISTRY_AUTH=htpasswd" \
--e "REGISTRY_AUTH_HTPASSWD_REALM=Registry Realm" \
--e "REGISTRY_AUTH_HTPASSWD_PATH=/auth/htpasswd" \
---mount type=bind,src=/home/docker/registry2/data,dst=/var/lib/registry \
---mount type=bind,src=/home/docker/registry2/certs,dst=/certs \
--e REGISTRY_HTTP_TLS_CERTIFICATE=/certs/domain.crt \
--e REGISTRY_HTTP_TLS_KEY=/certs/domain.key \
---constraint node.labels.test-host==test2 \
-registry:2 
-```
-
-#### 某个docker启动
+#### 非集群模式安装docker私有仓库
 
 ```shell
   docker run -d -p 5000:5000 --restart=always --name registry \
@@ -232,6 +209,26 @@ registry:2
 
 registry:2
 
+#### docker swarm mode模式安装docker私有仓库
+
+注意：--constraint node.labels.test-host:test2 配置，通过label指定了registry部署在集群中的某个机器，例如：本配置指定了部署在test-host:test2的label机器上，因为这个test-host:test2只在docker2的机器上配置了，因此registry2会被swarm部署到docker2上。
+
+```shell
+docker service create --name registry --publish 5000:5000 \
+--mount type=bind,src=/home/docker/registry2/auth,dst=/auth \
+-e "REGISTRY_AUTH=htpasswd" \
+-e "REGISTRY_AUTH_HTPASSWD_REALM=Registry Realm" \
+-e "REGISTRY_AUTH_HTPASSWD_PATH=/auth/htpasswd" \
+--mount type=bind,src=/home/docker/registry2/data,dst=/var/lib/registry \
+--mount type=bind,src=/home/docker/registry2/certs,dst=/certs \
+-e REGISTRY_HTTP_TLS_CERTIFICATE=/certs/domain.crt \
+-e REGISTRY_HTTP_TLS_KEY=/certs/domain.key \
+--constraint node.labels.test-host==test2 \
+registry:2 
+```
+
+#### 
+
 ### 测试发布到私有仓库(certificate signed by unknow authority)
 
 如下的操作其实都应是私有仓库客户端操作，以下是为了测试方便，私有仓库和客户端docker在一台机器上模拟测试了。如果私有仓库就一台单独的机器，则没有必要下面的操作，其应在docker客户端(pull和push)的机器上完成。
@@ -256,10 +253,6 @@ push失败了！从错误日志来看，docker client认为server传输过来的
 sudo mkdir -p /etc/docker/certs.d/dockerdongyuit.cn:5000
 
 sudo cp /home/docker/registry2/certs/domain.crt /etc/docker/certs.d/dockerdongyuit.cn:5000/ca.crt
-
-~~重新启动docker环境~~
-
-~~sudo systemctl restart docker~~
 
 重试发布到仓库，提示(no basic auth credentials)
 
@@ -293,7 +286,15 @@ Login Succeeded
 
 **重试发布到仓库，成功**
 
-docker login  dockerdongyuit.cn:5000
+docker push dockerdongyuit.cn:5000/hello-world
+
+```
+The push refers to repository [dockerdongyuit.cn:5000/hello-world]
+9c27e219663c: Pushed 
+latest: digest: sha256:90659bf80b44ce6be8234e6ff90a1ac34acbeb826903b02cfa0da11c82cbc042 size: 525
+```
+
+
 
 ### 客户端访问私有仓库(客户端)
 
@@ -513,6 +514,31 @@ docker inspect redis1 | grep IPAddress
 
 docker inspect jenkins/jenkins | grep User
 
+### docker stop xxx
+
+关闭容器
+
+### docker stop xxx -t sss
+
+参数 -t：关闭容器的限时(秒)，如果超时未能关闭则用kill强制关闭，默认值10s，这个时间用于容器的自己保存状态
+docker stop -t=60 容器ID或容器名
+
+### docker kill xxx
+
+强制直接关闭容器
+
+### docker restart xxx
+
+重启容器
+
+### docker exec 进入容器
+
+docker exec -it xxx /bin/bash
+
+### docker exec 运行容器内命令
+
+docker exec -it xxx 容器内命令
+
 
 
 
@@ -530,6 +556,8 @@ docker search xxx，不要盲目的相信这个命令了，还是使用上面的
 ### centos7中文基础镜像
 
 注意：centos8使用如下脚本报错。
+
+如果你使用docker pull centos ,则下载的是centos8的版本。
 
 #### 准备
 
@@ -603,7 +631,7 @@ docker push  dockerdongyuit.cn:5000/centos7zh:1.0.1
 
 #### 准备
 
-Dockerfile目录下依赖于jdk目录，这个文件可以从通过tar -zxvf jdk-8u192-linux-x64.tar.gz解压获取到jdk目录。
+Dockerfile目录下依赖于jdk目录，这个文件可以从通过tar -zxvf jdk-8u212-linux-x64.tar.gz解压获取到jdk目录。
 
 vi Dockerfile
 
@@ -978,8 +1006,8 @@ docker pull jenkins/jenkins:lts
 **设置jenkins访问者权限**
 
 ```shell
-mkdir /data/jenkins_home
-chown -R 1000:1000 /data/jenkins_home
+mkdir -p /home/docker/jenkins/jenkins_home
+chown -R 1000:1000 /home/docker/jenkins/jenkins_home
 或者
 启动jenkins指定为root用户，docker启动脚本加入 --user=root 
 ```
@@ -987,7 +1015,7 @@ chown -R 1000:1000 /data/jenkins_home
 **启动jenkins**
 
 ```shell
-docker run --name jenkins --env JAVA_OPTS="-Dhudson.model.DownloadService.noSignatureCheck=true -Duser.timezone=Asia/Shanghai" -p 10000:8080 -p 50000:50000 -v /data/jenkins_home:/var/jenkins_home -v /usr/local/jdk:/jdk -v /usr/local/maven:/maven -v /data/maven_repo:/maven_repo -d jenkins/jenkins:lts
+docker run --name jenkins --env JAVA_OPTS="-Dhudson.model.DownloadService.noSignatureCheck=true -Duser.timezone=Asia/Shanghai" -p 10000:10000 -p 50000:50000 -v /home/docker/jenkins/jenkins_home:/var/jenkins_home -v /usr/local/jdk:/jdk -v /usr/local/maven:/maven -v /home/docker/maven_repo:/maven_repo -d jenkins/jenkins:lts
 ```
 
 启动项说明：
@@ -996,19 +1024,19 @@ docker run --name jenkins --env JAVA_OPTS="-Dhudson.model.DownloadService.noSign
 
 --env JAVA_OPTS=-Dhudson.model.DownloadService.noSignatureCheck=true 不进行插件的摘要验证；
 
---user=root 使用root用户启动jenkins。默认是jenkins用户启动，这需要为外界挂载目录设置拥有者1000；
+--user=docker 使用docker用户启动jenkins。默认是jenkins用户启动，这需要为外界挂载目录设置拥有者1000；
 
--p 10000:8080 映射http管理界面端口；
+-p 10000:10000映射http管理界面端口；
 
 -p 50000:50000 映射jnpi端口；
 
--v /data/jenkins_home:/var/jenkins_home 挂载宿主机jenkins_home目录；
+-v /home/docker/jenkins/jenkins_home:/var/jenkins_home 挂载宿主机jenkins_home目录；
 
 -v /usr/local/jdk:/jdk 宿主机的jdk目录，挂载到docker容器中；
 
 -v /usr/local/maven:/maven 宿主机的maven目录，挂载到docker容器中；
 
--v /data/maven_repo:/maven_repo 宿主机的maven_repo目录(maven本地仓库)，挂载到docker容器中；
+-v /home/docker/maven_repo:/maven_repo 宿主机的maven_repo目录(maven本地仓库)，挂载到docker容器中；
 
 -d jenkins/jenkins:lts 后台启动jenkins/jenkins:lts容器；
 
@@ -1052,7 +1080,20 @@ Please use the following password to proceed to installation:
 
 以上jenkines的docker镜像安装和设置就完成了，jenkins的使用，可以见linux下的jenkins文档。
 
+### 制作业务系统镜像
 
+Dockerfile文件加入如下两个指令，在dockerfile的FROM指令后，ENTRYPOINT指令前：
+
+```dockerfile
+RUN useradd noroot -u 1000 -s /bin/bash
+USER noroot
+```
+
+这里的-u指定了用户的sid，这里统一设置为1000，如果你的宿主机需要挂载目录到镜像，则你的宿主机挂载的目录需要，指定1000为拥有者。例如：chown -R 1000:1000 /data/jenkins_home
+
+https://blog.csdn.net/yygydjkthh/article/details/47694929
+
+可以在宿主机上通过ps -ef|grep xxx，xxx为进程名，例如：nginx、redis等，来观察是否是非root用户启动docker.
 
 ## docker swarm
 
