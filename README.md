@@ -110,6 +110,33 @@ sudo chmod a+rw /var/run/docker.sock
 
 docker run hello-world
 
+## 配置防火墙控制发布端口访问
+
+默认情况下非host模式，使用publish参数发布docker容器端口，发布出去的端口不受firewall-cmd限制，其使用iptables来优先转发端口数据，不受控，这在很多情况下有安全问题。这里我们加入了配置 --iptables=false，其还可以提供端口转发，但访问受到了firewall-cmd限制，例如：设置后 -p 6379:6379 的docker容器发布操作，如果你没有使用firewall-cmd开启6379，则外界无法访问。
+
+vi /lib/systemd/system/docker.service
+
+查找:
+
+```
+ExecStart=/usr/bin/dockerd -H fd:// --containerd=/run/containerd/containerd.sock
+```
+
+在其后加入：--iptables=false
+
+```
+ExecStart=/usr/bin/dockerd -H fd:// --containerd=/run/containerd/containerd.sock --iptables=false
+```
+
+重启docker
+
+```
+sudo systemctl daemon-reload
+sudo systemctl restart docker
+```
+
+
+
 ## 安装私有仓库(registry2)
 
 ### 编辑/etc/hosts文件
@@ -492,11 +519,32 @@ java -Xms1g -Xmx1g -XX:+UseParNewGC -XX:+UseConcMarkSweepGC -jar /sc-config-1.0.
 
 ## docker命令
 
-### docker info
+### docker服务操作命令
+
+##### 重启docker服务
+
+重启docker
+
+```
+sudo systemctl daemon-reload
+sudo systemctl restart docker
+```
+
+#### docker info
 
 查看docker系统的信息，例如：docker版本、使用存储情况等。
 
-### docker inspect xxx
+### docker容器操作命令
+
+#### docker开机自动启动
+
+```
+--restart=always 
+```
+
+#### docker inspect 查看容器运行情况
+
+docker inspect  xxx
 
 查看docker镜像情况，命令：
 
@@ -514,28 +562,28 @@ docker inspect redis1 | grep IPAddress
 
 docker inspect jenkins/jenkins | grep User
 
-### docker stop xxx
+#### docker stop 停止容器
 
-关闭容器
+docker stop xxx
 
-### docker stop xxx -t sss
+#### docker stop -t sss 关闭容器的限时(秒)
 
 参数 -t：关闭容器的限时(秒)，如果超时未能关闭则用kill强制关闭，默认值10s，这个时间用于容器的自己保存状态
-docker stop -t=60 容器ID或容器名
+docker stop -t=60 xxx
 
-### docker kill xxx
+#### docker kill 强制直接关闭容器
 
-强制直接关闭容器
+docker kill xxx
 
-### docker restart xxx
+#### docker restart 重启容器
 
-重启容器
+docker restart xxx
 
-### docker exec 进入容器
+#### docker exec 进入容器
 
 docker exec -it xxx /bin/bash
 
-### docker exec 运行容器内命令
+#### docker exec 运行容器内命令
 
 docker exec -it xxx 容器内命令
 
@@ -685,21 +733,31 @@ docker pull redis
 
 注意：下面的**redis1**为这个redis docker实例的名字,一个宿主机上允许多个redis docker,因此要区别开。
 
-下面的配置会依赖这个redis1的docker实例名，如果需要部署多个可以替换这个redis1字样为redis2、redis3...
+下面的配置会依赖这个redis1的docker实例名，如果需要部署多个可以替换这个redis1字样为redis2、redis3...。
 
-```shell
-mkdir -p /data/redis1/data
-mkdir -p /data/redis1/config
+因为redis容器启动用户polkitd，因此要修改data和log目录的所有者。config目录的配置文件都是只读的，即使修改也是在docker用户下直接修改了，因此所有者设置为docker了，这样docker用户修改，polkitd用户也可以读取。
+
+```
+su - root
+echo never > /sys/kernel/mm/transparent_hugepage/enabled
+echo 'echo never > /sys/kernel/mm/transparent_hugepage/enabled' >> /etc/rc.local
+mkdir -p /home/docker/redis1/data
+mkdir -p /home/docker/redis1/log
+mkdir -p /home/docker/redis1/config
+chown polkitd:polkitd /home/docker/redis1/data/
+chown polkitd:polkitd /home/docker/redis1/log/
+chown docker:docker /home/docker/redis1/config/
 ```
 
 **下载redis.conf配置文件**
 
 ```shell
-cd /data/redis1/config
-wget https://github.com/zhangdberic/docker/blob/master/redis.conf -O /data/redis1/config/redis.conf
+curl  http://download.redis.io/redis-stable/redis.conf >> /home/docker/redis1/config/redis.conf
 ```
 
-vi /data/redis1/config/redis.conf
+vi /home/docker/redis1/config/redis.conf
+
+在官网redis.conf的修改，使用下面的配置
 
 ```properties
 protected-mode no # 保护模式设置为no
@@ -711,21 +769,42 @@ databases 100   # 允许的最大数据库数量
 #save 60 10000
 save ""
 maxmemory 5368709120   # 允许使用的最大内存空间
-maxmemory-policy volatile-lru   
-# 当redis中内存数据达到maxmemory时,触发"清除策略"，volatile-lru  ->对"过期集合"中的数据采取LRU(近期最少使用)算法.如果对key使用"expire"指令指定了过期时间,那么此key将会被添加到"过期集合"中。将已经过期/LRU的数据优先移除.如果"过期集合"中全部移除仍不能满足内存需求,将OOM.
+maxmemory-policy volatile-lru # 对"过期集合(exipre)"中的数据采取LRU(近期最少使用)算法   
 
 requirepass xxxxxx   #秘钥
 
-logfile /data/redis1/data/redis.log # 指定log文件的位置,启动docker的时候,会把/data挂载到宿主目录
+logfile /log/redis.log # 指定log文件的位置
+```
 
-注意：上面的配置修改后，最好先修改daemonize no，启动一次redis，看是否有什么警告，如果没有再修改为yes。
+内存模式配置
+
+```properties
+# 保护模式设置为no
+protected-mode no
+# docker环境应该使用0.0.0.0绑定,安全有宿主的防火墙控制
+bind 0.0.0.0
+# 基于后台允许
+daemonize no
+# 允许的最大数据库数量
+databases 100
+# 禁止持久化
+save ""
+# 允许使用的最大内存空间
+maxmemory 5368709120
+# 对"过期集合(exipre)"中的数据采取LRU(近期最少使用)算法   
+maxmemory-policy volatile-lru
+#秘钥
+requirepass 12345678
+# 指定log文件的位置
+logfile /log/redis.log
 ```
 
 **运行redis**
 
 ```shell
 docker run --name redis1 -p 6379:6379 \
--v /data/redis1/config/redis.conf:/etc/redis/redis.conf -v /data/redis1/data:/data \
+-v /home/docker/redis1/config/redis.conf:/etc/redis/redis.conf \
+-v /home/docker/redis1/log:/log \
 --privileged --sysctl net.core.somaxconn=10240 \
 -d redis redis-server /etc/redis/redis.conf
 ```
@@ -733,13 +812,13 @@ docker run --name redis1 -p 6379:6379 \
 **查看redis日志**
 
 ```shell
-tail -f /data/redis1/data/redis.log
+tail -f /home/docker/redis1/log/redis.log
 ```
 
 **telnet测试远程连接**
 
 ```
-telnet 192.168.1.250 6379
+telnet localhost 6379
 ```
 
 **访问redis容器**
