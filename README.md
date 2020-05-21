@@ -943,18 +943,18 @@ vi /home/docker/gitlab/config/gitlab.rb
 **下载镜像**
 
 ```
-docker pull nginx
+docker pull nginx:stable
 ```
 
 **创建nginx挂载目录**
 
 ```
-mkdir -p /data/nginx/{conf,conf.d,html,logs}
+mkdir -p /home/docker/nginx/{conf,conf.d,html,tmp,logs}
 ```
 
 **编辑nginx配置文件**
 
-vi /data/nginx/conf/nginx.conf
+vi /home/docker/nginx/conf/nginx.conf
 
 ```nginx
 user  nginx;
@@ -963,11 +963,9 @@ worker_processes  1;
 error_log  /var/log/nginx/error.log warn;
 pid        /var/run/nginx.pid;
 
-
 events {
     worker_connections  1024;
 }
-
 
 http {
     include       /etc/nginx/mime.types;
@@ -980,20 +978,14 @@ http {
     access_log  /var/log/nginx/access.log  main;
 
     sendfile        on;
-    #tcp_nopush     on;
 
     keepalive_timeout  65;
 
-    #gzip  on;
-
-    #include /etc/nginx/conf.d/*.conf; 注意：注释掉这个，否则你要仔细阅读这个目录下的default.conf文件内容
-    # 添加内容
-    
     server {
         listen       80;
         server_name  localhost;
 
-        #charset koi8-r;
+        charset utf-8;
         #access_log  /var/log/nginx/host.access.log  main;
 
         location / {
@@ -1001,37 +993,11 @@ http {
             index  index.html index.htm;
         }
 
-        #error_page  404              /404.html;
-
-        # redirect server error pages to the static page /50x.html
-        #
         error_page   500 502 503 504  /50x.html;
         location = /50x.html {
             root   /usr/share/nginx/html;
         }
 
-        # proxy the PHP scripts to Apache listening on 127.0.0.1:80
-        #
-        #location ~ \.php$ {
-        #    proxy_pass   http://127.0.0.1;
-        #}
-
-        # pass the PHP scripts to FastCGI server listening on 127.0.0.1:9000
-        #
-        #location ~ \.php$ {
-        #    root           html;
-        #    fastcgi_pass   127.0.0.1:9000;
-        #    fastcgi_index  index.php;
-        #    fastcgi_param  SCRIPT_FILENAME  /scripts$fastcgi_script_name;
-        #    include        fastcgi_params;
-        #}
-
-        # deny access to .htaccess files, if Apache's document root
-        # concurs with nginx's one
-        #
-        #location ~ /\.ht {
-        #    deny  all;
-        #}
     }
     
 }
@@ -1062,6 +1028,25 @@ http {
 
 ```
 
+**运行nginx**
+
+```shell
+docker run --name nginx -d --net host -v /home/docker/nginx/conf/nginx.conf:/etc/nginx/nginx.conf  -v /home/docker/nginx/logs:/var/log/nginx nginx
+```
+
+如果需要挂载html
+
+```
+-v /home/docker/nginx/html:/usr/share/nginx/html
+```
+
+**开启防火墙**
+
+```
+firewall-cmd --permanent --add-port=80/tcp
+firewall-cmd --reload
+```
+
 **验证nginx.conf**
 
 第1个nginx为容器名
@@ -1080,25 +1065,6 @@ docker restart nginx
 
 目前测试：docker exec -it nginx nginx -s reload不起作用。
 
-**运行nginx**
-
-```shell
-docker run --name nginx -d --net host -v /data/nginx/conf/nginx.conf:/etc/nginx/nginx.conf  -v /data/nginx/logs:/var/log/nginx nginx
-```
-
-如果需要挂载html
-
-```
--v /data/nginx/html:/usr/share/nginx/html
-```
-
-**开启防火墙**
-
-```
-firewall-cmd --permanent --add-port=80/tcp
-firewall-cmd --reload
-```
-
 ### jenkins镜像
 
 **拉取jenkins镜像**
@@ -1112,16 +1078,42 @@ docker pull jenkins/jenkins:lts
 **设置jenkins访问者权限**
 
 ```shell
+su - root
 mkdir -p /home/docker/jenkins/jenkins_home
 chown -R 1000:1000 /home/docker/jenkins/jenkins_home
 或者
 启动jenkins指定为root用户，docker启动脚本加入 --user=root 
 ```
 
+**宿主docker home 安装jdk**
+
+```bash
+su - docker
+tar xvf jdk-8u212-linux-x64.tar.gz 
+mv jdk1.8.0_212 /home/docker/jdk
+```
+
+**宿主docker home 安装maven**
+
+```shell
+wget https://mirrors.tuna.tsinghua.edu.cn/apache/maven/maven-3/3.6.3/binaries/apache-maven-3.6.3-bin.tar.gz
+tar xvf apache-maven-3.6.3-bin.tar.gz
+mv apache-maven-3.6.3 /home/docker/maven
+mkdir /home/docker/maven_repo
+```
+
+vi /home/docker/maven/conf/settings.xml
+
+```
+<localRepository>/home/docker/maven_repo</localRepository>
+```
+
+
+
 **启动jenkins**
 
 ```shell
-docker run --name jenkins --env JAVA_OPTS="-Dhudson.model.DownloadService.noSignatureCheck=true -Duser.timezone=Asia/Shanghai" -p 10000:10000 -p 50000:50000 -v /home/docker/jenkins/jenkins_home:/var/jenkins_home -v /usr/local/jdk:/jdk -v /usr/local/maven:/maven -v /home/docker/maven_repo:/maven_repo -d jenkins/jenkins:lts
+docker run --name jenkins --env JAVA_OPTS="-Dhudson.model.DownloadService.noSignatureCheck=true -Duser.timezone=Asia/Shanghai" -p 10000:8080 -p 50000:50000 -v /home/docker/jenkins/jenkins_home:/var/jenkins_home -v /home/docker/jdk:/jdk -v /home/docker/maven:/maven -v /home/docker/maven_repo:/maven_repo -d jenkins/jenkins:lts
 ```
 
 启动项说明：
@@ -1132,25 +1124,33 @@ docker run --name jenkins --env JAVA_OPTS="-Dhudson.model.DownloadService.noSign
 
 --user=docker 使用docker用户启动jenkins。默认是jenkins用户启动，这需要为外界挂载目录设置拥有者1000；
 
--p 10000:10000映射http管理界面端口；
+-p 10000:8080映射http管理界面端口；
 
 -p 50000:50000 映射jnpi端口；
 
 -v /home/docker/jenkins/jenkins_home:/var/jenkins_home 挂载宿主机jenkins_home目录；
 
--v /usr/local/jdk:/jdk 宿主机的jdk目录，挂载到docker容器中；
+-v home/docker/jdk:/jdk 宿主机的jdk目录，挂载到docker容器中；
 
--v /usr/local/maven:/maven 宿主机的maven目录，挂载到docker容器中；
+-v home/docker/maven:/maven 宿主机的maven目录，挂载到docker容器中；
 
 -v /home/docker/maven_repo:/maven_repo 宿主机的maven_repo目录(maven本地仓库)，挂载到docker容器中；
 
 -d jenkins/jenkins:lts 后台启动jenkins/jenkins:lts容器；
 
+**查看日志**
+
+docker logs jenkins -f
+
+有可能会出现无法访问jenkins国外网站，使用下面的"修改插件源"
+
 **修改插件源**
 
-上面第一次启动后会在/data/jenkines_home(挂载宿主机)目录下生成很多文件，
+上面第一次启动后会在/home/docker/jenkins/jenkins_home/(挂载宿主机)目录下生成很多文件，
 
-修改/data/jenkines_home/hudson.model.UpdateCenter.xml文件，这里修改url为：
+修改/home/docker/jenkins/jenkins_home/hudson.model.UpdateCenter.xml文件，这里修改url为：
+
+sudo vi /home/docker/jenkins/jenkins_home/hudson.model.UpdateCenter.xml
 
 https://jenkins-zh.gitee.io/update-center-mirror/tsinghua/update-center.json，这是国内的插件镜像地址；
 
