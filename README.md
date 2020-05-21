@@ -79,6 +79,37 @@ tee /etc/docker/daemon.json <<-'EOF'
 
 EOF
 
+### pull配置代理
+
+服务器不能直接接入互联网，需要走代理的情况下，使用下面的操作，配置docker pull代理。
+
+sudo mkdir -p /etc/systemd/system/docker.service.d
+sudo vi /etc/systemd/system/docker.service.d/http-proxy.conf
+
+```properties
+[Service]
+Environment="HTTP_PROXY=http://ygjproxy:Hiox87rn@10.60.32.165:11001" "NO_PROXY=localhost,127.0.0.1,dockerdongyuit.cn,10.60.32.171,10.60.32.197,10.60.32.198"
+```
+
+重启docker
+sudo systemctl daemon-reload
+
+
+
+sudo systemctl restart docker
+查看配置
+systemctl show --property=Environment docker
+验证
+docker search nginx
+
+**注意**
+
+NO_PROXY加入不需要代理的请求地址，例如：location，这里一定要把私有仓库的地址dockerdongyuit.cn加上，否则私有仓库push报错(Get https://dockerdongyuit.cn:80/v2/: Forbidden，也就是说访问私有仓库dockerdongyuit.cn:5000也走代理了）。
+
+**文档**
+
+https://docs.docker.com/config/daemon/systemd/
+
 ### docker非root用户环境运行
 
 #### 创建docker用户
@@ -169,7 +200,9 @@ Organizational Unit Name (eg, section) []:dev
 Common Name (eg, your name or your server's hostname) []:dockerdongyuit.cn
 ```
 
- 生成两个文件:ll /home/docker/registry2/certs/
+ 生成两个文件:
+
+ll /home/docker/registry2/certs/
 
 -rw-r--r--. 1 root root 2065 11月  6 15:43 domain.crt
 
@@ -188,8 +221,6 @@ docker run --entrypoint htpasswd registry:2 -Bbn heige 12345678 >>    /home/dock
 mkdir /home/docker/registry2/data
 
 ### 启动Secure Registry
-
-#### 非集群模式安装docker私有仓库
 
 ```shell
   docker run -d -p 5000:5000 --restart=always --name registry \
@@ -236,25 +267,7 @@ mkdir /home/docker/registry2/data
 
 registry:2
 
-#### docker swarm mode模式安装docker私有仓库
 
-注意：--constraint node.labels.test-host:test2 配置，通过label指定了registry部署在集群中的某个机器，例如：本配置指定了部署在test-host:test2的label机器上，因为这个test-host:test2只在docker2的机器上配置了，因此registry2会被swarm部署到docker2上。
-
-```shell
-docker service create --name registry --publish 5000:5000 \
---mount type=bind,src=/home/docker/registry2/auth,dst=/auth \
--e "REGISTRY_AUTH=htpasswd" \
--e "REGISTRY_AUTH_HTPASSWD_REALM=Registry Realm" \
--e "REGISTRY_AUTH_HTPASSWD_PATH=/auth/htpasswd" \
---mount type=bind,src=/home/docker/registry2/data,dst=/var/lib/registry \
---mount type=bind,src=/home/docker/registry2/certs,dst=/certs \
--e REGISTRY_HTTP_TLS_CERTIFICATE=/certs/domain.crt \
--e REGISTRY_HTTP_TLS_KEY=/certs/domain.key \
---constraint node.labels.test-host==test2 \
-registry:2 
-```
-
-#### 
 
 ### 测试发布到私有仓库(certificate signed by unknow authority)
 
@@ -272,7 +285,7 @@ docker push dockerdongyuit.cn:5000/hello-world
 
 ```
 The push refers to repository [dyit.com:5000/hello-word]
-Get https://dyit.com:5000/v2/: x509: certificate signed by unknow authority
+Get https://dockerdongyuit.cn:5000/v2/: x509: certificate signed by unknow authority
 ```
 
 push失败了！从错误日志来看，docker client认为server传输过来的证书的签署方是一个unknown authority（未知的CA），因此验证失败。我们需要让docker client安装我们的CA证书：
@@ -587,7 +600,17 @@ docker exec -it xxx /bin/bash
 
 docker exec -it xxx 容器内命令
 
+#### docker run 执行多个命令
 
+```
+docker run -idt ***/*** /bin/bash cs1.sh; cs2.sh; cs3.sh
+```
+
+#### 查看容器linux的版本
+
+```
+docker exec -it xxx cat /etc/issue
+```
 
 
 
@@ -717,16 +740,10 @@ docker push  dockerdongyuit.cn:5000/java:1.8
 
 **准备工作**
 
-搜索redis镜像
-
-```
-docker search redis
-```
-
-下载redis镜像
+下载redis镜像(版本5)，其会自动下载redis5的最后小版本。
 
 ```shell
-docker pull redis
+docker pull redis:5
 ```
 
 **创建redis docker挂载目录**
@@ -741,6 +758,7 @@ docker pull redis
 su - root
 echo never > /sys/kernel/mm/transparent_hugepage/enabled
 echo 'echo never > /sys/kernel/mm/transparent_hugepage/enabled' >> /etc/rc.local
+echo 'vm.overcommit_memory = 1' >> /usr/lib/sysctl.d/00-system.conf
 mkdir -p /home/docker/redis1/data
 mkdir -p /home/docker/redis1/log
 mkdir -p /home/docker/redis1/config
@@ -762,6 +780,7 @@ vi /home/docker/redis1/config/redis.conf
 ```properties
 protected-mode no # 保护模式设置为no
 bind 0.0.0.0    # docker环境应该使用0.0.0.0绑定,安全有宿主的防火墙控制
+port 6379	# 监听端口
 daemonize yes   # 基于后台允许
 databases 100   # 允许的最大数据库数量
 #save 900 1     # 禁止持久化
@@ -778,11 +797,15 @@ logfile /log/redis.log # 指定log文件的位置
 
 内存模式配置
 
+vi /home/docker/redis1/config/redis.conf
+
 ```properties
 # 保护模式设置为no
 protected-mode no
 # docker环境应该使用0.0.0.0绑定,安全有宿主的防火墙控制
 bind 0.0.0.0
+# 监听端口
+port 6379
 # 基于后台允许
 daemonize no
 # 允许的最大数据库数量
@@ -806,7 +829,7 @@ docker run --name redis1 -p 6379:6379 \
 -v /home/docker/redis1/config/redis.conf:/etc/redis/redis.conf \
 -v /home/docker/redis1/log:/log \
 --privileged --sysctl net.core.somaxconn=10240 \
--d redis redis-server /etc/redis/redis.conf
+-d redis:5 redis-server /etc/redis/redis.conf
 ```
 
 **查看redis日志**
@@ -814,6 +837,8 @@ docker run --name redis1 -p 6379:6379 \
 ```shell
 tail -f /home/docker/redis1/log/redis.log
 ```
+
+其会员警告，WARNING overcommit_memory is set to 0!，因为redis使用的容器linux版本是Debian GNU/Linux 10，目前还没有找到如何设置这个值的方法。
 
 **telnet测试远程连接**
 
@@ -879,21 +904,23 @@ docker pull gitlab/gitlab-ce
 **创建Gitlab挂载目录**，并分别创建子目录config,logs,data
 
 ```shell
-mkdir -p /data/gitlab/config
-mkdir -p /data/gitlab/data
-mkdir -p /data/gitlab/logs
+mkdir -p /home/docker/gitlab/config
+mkdir -p /home/docker/gitlab/data
+mkdir -p /home/docker/gitlab/logs
 ```
 
 **运行gitlab**
 
 ```shell
 docker run --name='gitlab' -d \
-    --publish 1443:443 --publish 7001:80 --publish 7002:22 \
-    --volume /data/gitlab/config:/etc/gitlab \
-    --volume /data/gitlab/logs:/var/log/gitlab \
-    --volume /data/gitlab/data:/var/opt/gitlab \
+    --publish 7000:80 --publish 7001:443 --publish 7002:22 \
+    --volume /home/docker/data/gitlab/config:/etc/gitlab \
+    --volume /home/docker/gitlab/logs:/var/log/gitlab \
+    --volume /home/docker/gitlab/data:/var/opt/gitlab \
     gitlab/gitlab-ce
 ```
+
+**注意**：gitlab-ce的docker方式启动，目前没办法非root用户启动，使用上面的语句启动gitlabs后/gitlab/logs和/gitlab/data两个目录自动变为root用户访问权限。
 
 **登录Gitlab** 
 
@@ -903,13 +930,13 @@ http://宿主机ip:7001
 
 **配置gitlab**
 
-vi /data/gitlab/config/gitlab.rb
+vi /home/docker/gitlab/config/gitlab.rb
 
 官方文档：https://docs.gitlab.com/omnibus/settings/configuration.html
 
 **备份**
 
-只需备份/data/gitlab目录就可以了。
+只需备份/home/docker/gitlab目录就可以了。
 
 ### Nginx镜像
 
@@ -1159,7 +1186,7 @@ Please use the following password to proceed to installation:
 
 以上jenkines的docker镜像安装和设置就完成了，jenkins的使用，可以见linux下的jenkins文档。
 
-### 制作业务系统镜像
+### 制作java应用镜像
 
 Dockerfile文件加入如下两个指令，在dockerfile的FROM指令后，ENTRYPOINT指令前：
 
@@ -1291,24 +1318,6 @@ docker3是执行netstat -ant |grep 2377
 tcp        0      0 192.168.5.77:28908      192.168.5.75:2377       ESTABLISHED
 tcp        0      0 192.168.5.77:5468       192.168.5.76:2377       ESTABLISHED
 tcp        0      0 192.168.5.77:28912      192.168.5.75:2377       ESTABLISHED
-
-```
-
-### pull配置代理
-
-```
-sudo mkdir -p /etc/systemd/system/docker.service.d
-sudo vi /etc/systemd/system/docker.service.d/http-proxy.conf
-设置代理服务器
-[Service]
-Environment="HTTP_PROXY=http://proxy_user:proxy_pass@proxy_server_ip:proxy_server_port"
-重启docker
-sudo systemctl daemon-reload
-sudo systemctl restart docker
-查看配置
-systemctl show --property=Environment docker
-验证
-docker search nginx
 
 ```
 
