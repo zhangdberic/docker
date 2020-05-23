@@ -579,6 +579,14 @@ docker inspect jenkins/jenkins | grep User
 
 docker stop xxx
 
+vi stop_container.sh
+
+```bash
+#!/bin/bash
+docker stop $1
+docker rm $1
+```
+
 #### docker stop -t sss 关闭容器的限时(秒)
 
 参数 -t：关闭容器的限时(秒)，如果超时未能关闭则用kill强制关闭，默认值10s，这个时间用于容器的自己保存状态
@@ -859,6 +867,21 @@ redis-cli
 docker exec -it redis1 redis-cli -h 127.0.0.1 -p 6379
 ```
 
+**停止redis**
+
+```
+#!/bin/bash
+docker exec -it redis1 redis-cli -h 127.0.0.1 -p 6379 -a passwd shutdown
+$HOME/stop_container.sh redis1
+```
+
+**开启防火墙**
+
+```
+  sudo firewall-cmd --permanent --add-rich-rule="rule family="ipv4" source address="xxx.xxx.xxx.xxx" port protocol="tcp" port="6379" accept"
+  sudo firewall-cmd --reload
+```
+
 
 
 ### Rabbitmq镜像
@@ -911,6 +934,8 @@ mkdir -p /home/docker/gitlab/logs
 
 **运行gitlab**
 
+启动gitlab需要很长时间，耐心等待吧
+
 ```shell
 docker run --name='gitlab' -d \
     --publish 7000:80 --publish 7001:443 --publish 7002:22 \
@@ -934,9 +959,26 @@ vi /home/docker/gitlab/config/gitlab.rb
 
 官方文档：https://docs.gitlab.com/omnibus/settings/configuration.html
 
+**停止gitlab**
+
+```
+#!/bin/bash
+docker exec -it gitlab gitlab-ctl stop
+$HOME/stop_container.sh gitlab
+```
+
 **备份**
 
 只需备份/home/docker/gitlab目录就可以了。
+
+**开启防火墙**
+
+```
+  sudo firewall-cmd --permanent --add-rich-rule="rule family="ipv4" source address="xxx.xxx.xxx.xxx" port protocol="tcp" port="7000" accept"
+  sudo firewall-cmd --reload
+```
+
+
 
 ### Nginx镜像
 
@@ -1170,13 +1212,10 @@ https://jenkins-zh.gitee.io/update-center-mirror/tsinghua/update-center.json，�
 
 http://ip:10000
 
-第一次启动，初始化密码，这个密码可以在jenkins docker启动控制台输出上看到，把这个粘贴过来，点击确认；
+第一次启动，获取初始化密码；
 
 ```shell
-Jenkins initial setup is required. An admin user has been created and a password generated.
-Please use the following password to proceed to installation:
-
-7dab5a023c5041c4b2437be2cec3cb72
+docker exec -it jenkins cat /var/jenkins_home/secrets/initialAdminPassword
 
 ```
 
@@ -1185,6 +1224,30 @@ Please use the following password to proceed to installation:
 第三步，创建一个用户，正常创建就可以了。
 
 以上jenkines的docker镜像安装和设置就完成了，jenkins的使用，可以见linux下的jenkins文档。
+
+**查看docker jenkins内容启动脚本**
+
+```
+cat /usr/local/bin/jenkins.sh
+```
+
+**代理访问**
+
+vi /home/docker/jenkins/jenkins_home/proxy.xml
+
+```
+<?xml version='1.1' encoding='UTF-8'?>
+<proxy>
+  <name>10.60.32.165</name>
+  <port>11001</port>
+  <userName>ygjproxy</userName>
+  <noProxyHost>localhost,127.0.0.1,10.60.*.*,192.168.*.*,dockerdongyuit.cn</noProxyHost>
+  <secretPassword>{xxxxxxxxxxxxxxxxxxxx}</secretPassword>
+  <testUrl>http://www.dongyuit.cn</testUrl>
+</proxy>
+```
+
+
 
 ### 制作java应用镜像
 
@@ -1200,6 +1263,16 @@ USER noroot
 https://blog.csdn.net/yygydjkthh/article/details/47694929
 
 可以在宿主机上通过ps -ef|grep xxx，xxx为进程名，例如：nginx、redis等，来观察是否是非root用户启动docker.
+
+**开启防火墙**
+
+```
+sudo firewall-cmd --permanent --add-rich-rule="rule family="ipv4" source address="xxx.xxx.xxx.xxx" port protocol="tcp" port="7010" accept"
+sudo firewall-cmd --reload
+
+```
+
+
 
 ## docker swarm
 
