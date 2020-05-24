@@ -1155,7 +1155,8 @@ vi /home/docker/maven/conf/settings.xml
 **启动jenkins**
 
 ```shell
-docker run --name jenkins --env JAVA_OPTS="-Dhudson.model.DownloadService.noSignatureCheck=true -Duser.timezone=Asia/Shanghai" -p 10000:8080 -p 50000:50000 -v /home/docker/jenkins/jenkins_home:/var/jenkins_home -v /home/docker/jdk:/jdk -v /home/docker/maven:/maven -v /home/docker/maven_repo:/maven_repo -d jenkins/jenkins:lts
+docker run --name jenkins --network host --env JAVA_OPTS="-Dhudson.model.DownloadService.noSignatureCheck=true -Duser.timezone=Asia/Shanghai -Djdk.http.auth.tunneling.disabledSchemes=" --env JENKINS_OPTS="--httpPort=7010" -v /home/docker/jenkins/jenkins_home:/var/jenkins_home -v /home/docker/jdk:/jdk -v /home/docker/maven:/maven -v /home/docker/maven_repo:/maven_repo -d jenkins/jenkins:lts
+docker logs -f jenkins
 ```
 
 启动项说明：
@@ -1166,9 +1167,9 @@ docker run --name jenkins --env JAVA_OPTS="-Dhudson.model.DownloadService.noSign
 
 --user=docker 使用docker用户启动jenkins。默认是jenkins用户启动，这需要为外界挂载目录设置拥有者1000；
 
--p 10000:8080映射http管理界面端口；
+~~-p 10000:8080映射http管理界面端口；~~
 
--p 50000:50000 映射jnpi端口；
+~~-p 50000:50000 映射jnpi端口；~~
 
 -v /home/docker/jenkins/jenkins_home:/var/jenkins_home 挂载宿主机jenkins_home目录；
 
@@ -1178,6 +1179,8 @@ docker run --name jenkins --env JAVA_OPTS="-Dhudson.model.DownloadService.noSign
 
 -v /home/docker/maven_repo:/maven_repo 宿主机的maven_repo目录(maven本地仓库)，挂载到docker容器中；
 
+--env JENKINS_OPTS="--httpPort=7010" 设置jenkins启动端口，默认是8080；
+
 -d jenkins/jenkins:lts 后台启动jenkins/jenkins:lts容器；
 
 **查看日志**
@@ -1185,28 +1188,6 @@ docker run --name jenkins --env JAVA_OPTS="-Dhudson.model.DownloadService.noSign
 docker logs jenkins -f
 
 有可能会出现无法访问jenkins国外网站，使用下面的"修改插件源"
-
-**修改插件源**
-
-上面第一次启动后会在/home/docker/jenkins/jenkins_home/(挂载宿主机)目录下生成很多文件，
-
-修改/home/docker/jenkins/jenkins_home/hudson.model.UpdateCenter.xml文件，这里修改url为：
-
-sudo vi /home/docker/jenkins/jenkins_home/hudson.model.UpdateCenter.xml
-
-https://jenkins-zh.gitee.io/update-center-mirror/tsinghua/update-center.json，这是国内的插件镜像地址；
-
-```xml
-<?xml version='1.0' encoding='UTF-8'?>
-<sites>
-  <site>
-    <id>default</id>
-    <url>https://jenkins-zh.gitee.io/update-center-mirror/tsinghua/update-center.json</url>
-  </site>
-</sites>
-```
-
-再重新启动docker jenkines容器。http://ip:10000/restart
 
 **http界面初始化jenkins系统**
 
@@ -1219,7 +1200,7 @@ docker exec -it jenkins cat /var/jenkins_home/secrets/initialAdminPassword
 
 ```
 
-第二步，插件初始化，这里可以先不用安装任何插件，选择第2个（自定义插件安装），并选择none（不安装插件）。
+第二步，插件初始化，忽略跳过，这里可以先不用安装任何插件。
 
 第三步，创建一个用户，正常创建就可以了。
 
@@ -1229,22 +1210,6 @@ docker exec -it jenkins cat /var/jenkins_home/secrets/initialAdminPassword
 
 ```
 cat /usr/local/bin/jenkins.sh
-```
-
-**代理访问**
-
-vi /home/docker/jenkins/jenkins_home/proxy.xml
-
-```
-<?xml version='1.1' encoding='UTF-8'?>
-<proxy>
-  <name>10.60.32.165</name>
-  <port>11001</port>
-  <userName>ygjproxy</userName>
-  <noProxyHost>localhost,127.0.0.1,10.60.*.*,192.168.*.*,dockerdongyuit.cn</noProxyHost>
-  <secretPassword>{xxxxxxxxxxxxxxxxxxxx}</secretPassword>
-  <testUrl>http://www.dongyuit.cn</testUrl>
-</proxy>
 ```
 
 
